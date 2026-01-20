@@ -87,21 +87,9 @@ Track **any ERC-20 token** across multiple blockchains:
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- **Docker Desktop** (Docker Engine + Docker Compose)
-- **macOS/Linux** (Windows with WSL2 supported)
-- **8GB+ RAM** available for Docker
-- **API Keys** (included in `.env.example`)
-
 ### Installation
 
-1. **Clone and navigate to the project:**
-```bash
-cd /Users/najia/git_repo/Bubble
-```
-
-2. **Run the initialization script:**
+1. **Run the initialization script:**
 ```bash
 chmod +x init_poc.sh
 ./init_poc.sh
