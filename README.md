@@ -7,6 +7,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg)](https://www.postgresql.org/)
 [![Celery](https://img.shields.io/badge/Celery-5.6-green.svg)](https://docs.celeryq.dev/)
 [![Tests](https://img.shields.io/badge/tests-22%20passing-brightgreen.svg)](#testing)
+[![License](https://img.shields.io/badge/license-Source%20Available-orange.svg)](#license)
 
 Production-grade blockchain analytics platform for tracking ERC-20 token transactions across multiple networks with automated data pipelines and graph visualization.
 
@@ -76,8 +77,9 @@ docker compose up -d --build
 | Dashboard | http://localhost:8080 |
 | Admin Panel | http://localhost:8080/admin |
 | Visualizations | http://localhost:8080/visualize |
+| **API Docs (Swagger)** | http://localhost:8080/api/docs |
+| GraphQL Explorer | http://localhost:8080/graphql |
 | API Health | http://localhost:8080/api/health |
-| GraphQL | http://localhost:8080/graphql |
 
 ### Production Mode
 ```bash
@@ -255,6 +257,19 @@ Additional documentation available in `docs/`:
 
 ---
 
-**Built with:** Python 3.12, Flask, Celery, PostgreSQL, Redis, TigerGraph, Docker
+## 📜 License
 
-**License:** MIT
+**Source Available License** - Free for educational and personal use.
+
+| Use Case | Allowed | Cost |
+|----------|---------|------|
+| Learning / Education | ✅ | Free |
+| Personal Projects | ✅ | Free |
+| Portfolio | ✅ | Free |
+| Commercial / Business | ⚠️ | [Contact](https://datascience-adventure.xyz/contact) |
+
+See [LICENSE](LICENSE) for full terms.
+
+---
+
+**Built with:** Python 3.12, Flask, Celery, PostgreSQL, Redis, TigerGraph, Docker
