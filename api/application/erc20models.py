@@ -78,7 +78,7 @@ class ERC20TransferEventBase(Base):
         block_event_class_name = f'{trigram.capitalize()}BlockTransferEvent'
         # Generate a unique backref name using the class name to avoid conflicts
         unique_backref_name = f'{cls.__name__.lower()}_backref'
-        return relationship(block_event_class_name, backref=backref(unique_backref_name, cascade="all, delete-orphan"))
+        return relationship(block_event_class_name, backref=unique_backref_name)
 
 def generate_block_transfer_event_classes(session):
     trigrams = session.query(Token.trigram).distinct().all()
@@ -114,7 +114,7 @@ def generate_erc20_classes(session):
             globals()[class_name] = type(class_name, (ERC20TransferEventBase,), {
                 '__tablename__': f'{symbol.lower()}_{trigram.lower()}_erc20_transfer_event',
                 'block_event_hash': Column(String, ForeignKey(f'{trigram.lower()}_block_transfer_event.hash'), nullable=False, index=True),
-                'block_event': relationship(block_class_name, backref=backref(f'{class_name.lower()}_backref', cascade="all, delete-orphan")),
+                'block_event': relationship(block_class_name, backref=f'{class_name.lower()}_backref'),
                 '__mapper_args__': {'polymorphic_identity': f'{symbol}_{trigram}'},
             })
             erc20models_logger.info(f"{class_name} has been added and {symbol.lower()}_{trigram.lower()}_erc20_transfer_event table has been created")

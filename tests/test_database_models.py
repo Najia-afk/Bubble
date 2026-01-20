@@ -50,15 +50,18 @@ def test_sqlalchemy_base_registry():
 @pytest.mark.ghst
 def test_ghst_token_creation(db_session):
     """Test creating GHST token in database."""
-    # Check if GHST already exists
+    contract_address = '0x385Eeac5cB85A38A9a07A70c73e0a3271CfB54A7'
+    
+    # Check if GHST already exists by contract_address (primary key)
     existing = db_session.query(Token).filter_by(
-        symbol='GHST',
-        asset_platform_id='polygon-pos'
+        contract_address=contract_address
     ).first()
     
     if existing:
-        assert existing.symbol == 'GHST'
+        # Token already exists from another test, just verify it
+        assert existing.symbol.upper() == 'GHST'  # Case-insensitive check
         assert existing.asset_platform_id == 'polygon-pos'
+        assert existing.contract_address == contract_address
     else:
         # Create new GHST token
         ghst = Token(
@@ -66,8 +69,8 @@ def test_ghst_token_creation(db_session):
             symbol='GHST',
             name='Aavegotchi',
             asset_platform_id='polygon-pos',
-            contract_address='0x385Eeac5cB85A38A9a07A70c73e0a3271CfB54A7',
-            trigram='GHST',
+            contract_address=contract_address,
+            trigram='POL',  # Polygon trigram (matches complete_dataflow test)
             history_tag=1,
             transfert_erc20_tag=1
         )
@@ -75,6 +78,7 @@ def test_ghst_token_creation(db_session):
         db_session.commit()
         
         # Verify
-        created = db_session.query(Token).filter_by(symbol='GHST').first()
+        created = db_session.query(Token).filter_by(contract_address=contract_address).first()
         assert created is not None
         assert created.symbol == 'GHST'
+        assert created.contract_address == contract_address
