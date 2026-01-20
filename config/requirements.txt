@@ -9,6 +9,7 @@
 # Web Framework
 Flask>=3.0.0
 Flask-CORS>=4.0.0
+flask-swagger-ui>=4.11.1
 gunicorn>=21.0.0
 
 # Database

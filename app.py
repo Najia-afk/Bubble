@@ -6,6 +6,7 @@
 #app.py
 from flask import Flask, g, jsonify, request, render_template
 from flask_cors import CORS
+from flask_swagger_ui import get_swaggerui_blueprint
 from sqlalchemy.orm import sessionmaker
 import logging
 from config.settings import Config, get_config
@@ -15,6 +16,10 @@ from utils.logging_config import setup_logging
 import os
 
 SessionFactory = get_session_factory()
+
+# Swagger UI configuration
+SWAGGER_URL = '/api/docs'
+API_URL = '/static/swagger.json'
 
 def create_app():
     # Setup session factory
@@ -29,6 +34,20 @@ def create_app():
     
     # Enable CORS
     CORS(app)
+    
+    # Register Swagger UI blueprint
+    swaggerui_blueprint = get_swaggerui_blueprint(
+        SWAGGER_URL,
+        API_URL,
+        config={
+            'app_name': "Bubble API",
+            'layout': "BaseLayout",
+            'deepLinking': True,
+            'displayRequestDuration': True,
+            'docExpansion': 'list'
+        }
+    )
+    app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
     
     app_logger = setup_logging('application.log')
 

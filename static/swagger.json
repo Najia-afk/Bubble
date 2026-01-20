@@ -1,0 +1,469 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Bubble API",
+    "description": "Blockchain Analytics Platform - ERC20 Token Transfer Analysis API\n\n## Overview\nBubble provides a GraphQL-first API for querying blockchain data. All data access goes through the GraphQL schema.\n\n## Authentication\nCurrently no authentication required (development mode).\n\n## Rate Limits\nNo rate limits in development mode.\n\n## License\nSource Available - Free for educational use. Commercial use requires license.\nContact: https://datascience-adventure.xyz/contact",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Bubble Support",
+      "url": "https://datascience-adventure.xyz/contact"
+    },
+    "license": {
+      "name": "Source Available License",
+      "url": "https://github.com/Najia-afk/Bubble/blob/main/LICENSE"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development (via Nginx)"
+    },
+    {
+      "url": "http://localhost:5000",
+      "description": "Direct Flask (development only)"
+    }
+  ],
+  "tags": [
+    {"name": "Health", "description": "Service health endpoints"},
+    {"name": "Tokens", "description": "Token management operations"},
+    {"name": "Transfers", "description": "ERC20 transfer data"},
+    {"name": "Graph", "description": "Visualization data endpoints"},
+    {"name": "Tasks", "description": "Celery task management"},
+    {"name": "GraphQL", "description": "GraphQL API endpoint"}
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Application health check",
+        "description": "Returns service health status for Docker/Kubernetes",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string", "example": "healthy"},
+                    "service": {"type": "string", "example": "bubble-api"},
+                    "timestamp": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "API health check",
+        "description": "Returns API service health status",
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tokens/list": {
+      "get": {
+        "tags": ["Tokens"],
+        "summary": "List all registered tokens",
+        "description": "Returns all tokens registered in the database with their metadata",
+        "responses": {
+          "200": {
+            "description": "List of tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tokens": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/Token"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tokens/add": {
+      "post": {
+        "tags": ["Tokens"],
+        "summary": "Add a new token",
+        "description": "Register a new ERC20 token and auto-generate database tables",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["contract_address", "blockchain", "trigram"],
+                "properties": {
+                  "contract_address": {
+                    "type": "string",
+                    "pattern": "^0x[a-fA-F0-9]{40}$",
+                    "example": "0x385Eeac5cB85A38A9a07A70c73e0a3271CfB54A7"
+                  },
+                  "blockchain": {
+                    "type": "string",
+                    "enum": ["polygon-pos", "ethereum", "base", "binance-smart-chain"],
+                    "example": "polygon-pos"
+                  },
+                  "trigram": {
+                    "type": "string",
+                    "enum": ["POL", "ETH", "BASE", "BSC"],
+                    "example": "POL"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token added successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"},
+                    "token": {"$ref": "#/components/schemas/Token"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Error"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/transfers": {
+      "get": {
+        "tags": ["Graph"],
+        "summary": "Get transfer data for visualization",
+        "description": "Returns transfer data in vis.js compatible format for network graph visualization. Internally queries via GraphQL schema.",
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "query",
+            "schema": {"type": "string", "default": "POL"},
+            "description": "Chain trigram (POL, ETH, BASE)"
+          },
+          {
+            "name": "symbol",
+            "in": "query", 
+            "schema": {"type": "string", "default": "ghst"},
+            "description": "Token symbol (lowercase)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {"type": "integer", "default": 500},
+            "description": "Maximum number of transfers to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Graph data for visualization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodes": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/GraphNode"}
+                    },
+                    "edges": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/GraphEdge"}
+                    },
+                    "stats": {"$ref": "#/components/schemas/GraphStats"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats/dashboard": {
+      "get": {
+        "tags": ["Transfers"],
+        "summary": "Get dashboard statistics",
+        "description": "Returns aggregated statistics for the dashboard (tokens, transfers, wallets, chains)",
+        "responses": {
+          "200": {
+            "description": "Dashboard statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tokens": {"type": "integer", "example": 1},
+                    "transfers": {"type": "integer", "example": 10291},
+                    "wallets": {"type": "integer", "example": 561},
+                    "chains": {
+                      "type": "array",
+                      "items": {"type": "string"},
+                      "example": ["POL", "BASE", "ETH"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/get_erc20_transfer_history": {
+      "get": {
+        "tags": ["Transfers"],
+        "summary": "Fetch ERC20 transfers (async task)",
+        "description": "Starts a Celery task to fetch ERC20 transfer history from blockchain explorers",
+        "parameters": [
+          {
+            "name": "trigram",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Chain trigram (POL, ETH, BASE)"
+          },
+          {
+            "name": "symbols",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Comma-separated token symbols"
+          },
+          {
+            "name": "startBlock",
+            "in": "query",
+            "schema": {"type": "integer", "default": 1},
+            "description": "Start block number"
+          },
+          {
+            "name": "endBlock",
+            "in": "query",
+            "schema": {"type": "integer", "default": 999999999},
+            "description": "End block number"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "task_id": {"type": "string"},
+                    "status": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Transfers"],
+        "summary": "Fetch ERC20 transfers (batch)",
+        "description": "Starts Celery tasks for multiple fetch requests",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "trigram": {"type": "string"},
+                    "symbols": {"type": "array", "items": {"type": "string"}},
+                    "startBlock": {"type": "integer"},
+                    "endBlock": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tasks started"
+          }
+        }
+      }
+    },
+    "/api/task_status/{task_id}": {
+      "get": {
+        "tags": ["Tasks"],
+        "summary": "Get task status",
+        "description": "Check the status of a Celery async task",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Celery task ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {"type": "string", "enum": ["PENDING", "STARTED", "SUCCESS", "FAILURE"]},
+                    "result": {"type": "object"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/graphql": {
+      "get": {
+        "tags": ["GraphQL"],
+        "summary": "GraphiQL Interface",
+        "description": "Interactive GraphQL IDE for exploring the API",
+        "responses": {
+          "200": {
+            "description": "GraphiQL HTML interface",
+            "content": {
+              "text/html": {}
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["GraphQL"],
+        "summary": "Execute GraphQL query",
+        "description": "Execute a GraphQL query against the Bubble schema",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "example": "{ erc20TransferEvents(trigram: \"POL\", symbols: [\"ghst\"], limit: 10) { edges { node { hash fromContractAddress toContractAddress value } } } }"
+                  },
+                  "variables": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "GraphQL response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {"type": "object"},
+                    "errors": {
+                      "type": "array",
+                      "items": {"type": "string"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string", "example": "healthy"},
+          "service": {"type": "string", "example": "bubble-api"},
+          "timestamp": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Token": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "symbol": {"type": "string", "example": "GHST"},
+          "name": {"type": "string", "example": "Aavegotchi"},
+          "contract_address": {"type": "string"},
+          "blockchain": {"type": "string"},
+          "trigram": {"type": "string"},
+          "decimals": {"type": "integer", "example": 18}
+        }
+      },
+      "GraphNode": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "description": "Wallet address"},
+          "label": {"type": "string", "description": "Shortened address"},
+          "color": {"type": "string"},
+          "size": {"type": "integer"}
+        }
+      },
+      "GraphEdge": {
+        "type": "object", 
+        "properties": {
+          "from": {"type": "string"},
+          "to": {"type": "string"},
+          "value": {"type": "number"},
+          "title": {"type": "string"}
+        }
+      },
+      "GraphStats": {
+        "type": "object",
+        "properties": {
+          "total_transfers": {"type": "integer"},
+          "total_volume": {"type": "number"},
+          "unique_wallets": {"type": "integer"}
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {"type": "string"}
+        }
+      }
+    }
+  }
+}
