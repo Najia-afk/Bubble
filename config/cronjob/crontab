@@ -1,0 +1,3 @@
+* * * * * /usr/bin/python3 /etc/bubble/PostgresDB/src/scrapper_token_price_history.py >> /tmp/cron-log 2>&1
+* * * * * sleep 15; /usr/bin/python3 /etc/bubble/PostgresDB/src/scrapper_token_erc20_poly_transfert.py >> /tmp/cron-log 2>&1
+0 0 * * * /bin/sh /etc/bubble/Config/cronjob/rename_logs.sh >> /tmp/rename-log 2>&1

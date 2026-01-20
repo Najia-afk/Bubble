@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Token Price History</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.1/moment.js"></script>
+  </head>
+  <body>
+    <div class="top-nav">
+      <div id="domain-name">adventurecrypto.xyz</div>
+    </div>
+    
+    <div class="container">
+      <h1>Token Price History</h1>
+      <form id="form">
+        <label for="contract_address">Enter the contract address:</label>
+        <input type="text" id="contract_address" name="contract_address">
+        
+        <label for="start_date">Start Date:</label>
+        <input type="date" id="start_date" name="start_date">
+        
+        <label for="end_date">End Date:</label>
+        <input type="date" id="end_date" name="end_date">
+        
+        <label for="scale">Select scale:</label>
+        <select id="scale" name="scale">
+          <option value="15min">15 minutes</option>
+          <option value="hourly">Hourly</option>
+          <option value="12h">12 hours</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        
+        <input type="submit" value="Get Price History">
+      </form>
+      
+      <div id="result"></div>
+      <canvas id="chart"></canvas>
+    </div>
+    <script src="/js/get_token_price_history.js"></script>
+  </body>
+</html>

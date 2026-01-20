@@ -1,0 +1,204 @@
+// TigerGraph Schema for Bubble - Blockchain Transaction Graph
+// This schema models wallets, tokens, blocks, chains and their relationships
+
+// Create Graph
+CREATE GRAPH BubbleGraph()
+
+USE GRAPH BubbleGraph
+
+// ============================================================================
+// VERTEX TYPES
+// ============================================================================
+
+// Wallet/Address vertex
+CREATE VERTEX Wallet (
+    PRIMARY_ID address STRING,
+    first_seen DATETIME,
+    last_seen DATETIME,
+    total_transactions UINT DEFAULT 0,
+    total_volume_usd DOUBLE DEFAULT 0.0,
+    is_contract BOOL DEFAULT false,
+    labels SET<STRING>  // e.g., "whale", "exchange", "bridge"
+) WITH STATS="OUTDEGREE_BY_EDGETYPE"
+
+// Token vertex
+CREATE VERTEX Token (
+    PRIMARY_ID contract_address STRING,
+    symbol STRING,
+    name STRING,
+    decimals UINT,
+    total_supply DOUBLE,
+    coingecko_id STRING,
+    first_tracked DATETIME
+) WITH STATS="OUTDEGREE_BY_EDGETYPE"
+
+// Blockchain vertex
+CREATE VERTEX Chain (
+    PRIMARY_ID trigram STRING,  // ETH, BSC, POL, BASE
+    name STRING,
+    asset_platform_id STRING,
+    scanner_url STRING,
+    block_time DOUBLE  // Average block time in seconds
+) WITH STATS="OUTDEGREE_BY_EDGETYPE"
+
+// Block vertex
+CREATE VERTEX Block (
+    PRIMARY_ID block_hash STRING,
+    chain_trigram STRING,
+    block_number UINT,
+    timestamp DATETIME,
+    transaction_count UINT DEFAULT 0
+) WITH STATS="OUTDEGREE_BY_EDGETYPE"
+
+// Transaction vertex (for aggregated view)
+CREATE VERTEX Transaction (
+    PRIMARY_ID tx_hash STRING,
+    chain_trigram STRING,
+    block_number UINT,
+    timestamp DATETIME,
+    nonce UINT,
+    transaction_index UINT
+) WITH STATS="OUTDEGREE_BY_EDGETYPE"
+
+// ============================================================================
+// EDGE TYPES
+// ============================================================================
+
+// Token transfer between wallets
+CREATE DIRECTED EDGE Transfer (
+    FROM Wallet,
+    TO Wallet,
+    token_address STRING,
+    amount DOUBLE,
+    amount_usd DOUBLE DEFAULT 0.0,
+    tx_hash STRING,
+    block_number UINT,
+    timestamp DATETIME,
+    chain_trigram STRING
+) WITH REVERSE_EDGE="TransferReverse"
+
+// Wallet holds token
+CREATE UNDIRECTED EDGE Holds (
+    FROM Wallet,
+    TO Token,
+    current_balance DOUBLE DEFAULT 0.0,
+    last_updated DATETIME
+)
+
+// Token exists on chain
+CREATE UNDIRECTED EDGE ExistsOn (
+    FROM Token,
+    TO Chain,
+    deployed_at DATETIME,
+    contract_address STRING
+)
+
+// Transaction occurred in block
+CREATE DIRECTED EDGE InBlock (
+    FROM Transaction,
+    TO Block
+)
+
+// Transaction involves token
+CREATE UNDIRECTED EDGE Involves (
+    FROM Transaction,
+    TO Token,
+    amount DOUBLE
+)
+
+// Wallet interacts with wallet (aggregated)
+CREATE DIRECTED EDGE Interacts (
+    FROM Wallet,
+    TO Wallet,
+    interaction_count UINT DEFAULT 1,
+    total_volume DOUBLE DEFAULT 0.0,
+    first_interaction DATETIME,
+    last_interaction DATETIME,
+    chains SET<STRING>  // Which chains they interact on
+) WITH REVERSE_EDGE="InteractsReverse"
+
+// Block on chain
+CREATE DIRECTED EDGE OnChain (
+    FROM Block,
+    TO Chain
+)
+
+// Cross-chain bridge detection
+CREATE DIRECTED EDGE Bridge (
+    FROM Wallet,
+    TO Wallet,
+    from_chain STRING,
+    to_chain STRING,
+    token_symbol STRING,
+    amount DOUBLE,
+    timestamp DATETIME,
+    confidence DOUBLE DEFAULT 1.0  // 0-1, how confident we are this is a bridge
+)
+
+// ============================================================================
+// QUERIES
+// ============================================================================
+
+// Query to get wallet transaction flow for last 24h
+CREATE QUERY GetWalletFlow24h(VERTEX<Wallet> wallet_address) FOR GRAPH BubbleGraph {
+    
+    DATETIME cutoff_time;
+    cutoff_time = to_datetime(datetime_sub(now(), INTERVAL 24 HOUR));
+    
+    Wallets = {wallet_address};
+    
+    // Get all transfers in last 24h
+    Transfers = SELECT t
+                FROM Wallets:s -(Transfer:e)- Wallet:t
+                WHERE e.timestamp >= cutoff_time;
+    
+    PRINT Wallets;
+    PRINT Transfers;
+}
+
+// Query to detect transaction clusters
+CREATE QUERY DetectClusters(STRING chain_trigram, INT time_window_hours = 24, INT min_cluster_size = 5) FOR GRAPH BubbleGraph {
+    
+    DATETIME cutoff_time;
+    cutoff_time = to_datetime(datetime_sub(now(), INTERVAL time_window_hours HOUR));
+    
+    // Find wallets with high interaction in time window
+    ActiveWallets = SELECT w
+                    FROM Wallet:w -(Transfer:e)- Wallet:t
+                    WHERE e.timestamp >= cutoff_time 
+                    AND e.chain_trigram == chain_trigram
+                    GROUP BY w
+                    HAVING count(e) >= min_cluster_size;
+    
+    PRINT ActiveWallets;
+}
+
+// Query to get token flow across chains
+CREATE QUERY GetTokenCrossChainFlow(STRING token_symbol, INT hours = 24) FOR GRAPH BubbleGraph {
+    
+    DATETIME cutoff_time;
+    cutoff_time = to_datetime(datetime_sub(now(), INTERVAL hours HOUR));
+    
+    // Find all chains this token exists on
+    Tokens = SELECT t
+             FROM Token:t
+             WHERE t.symbol == token_symbol;
+    
+    Chains = SELECT c
+             FROM Tokens:t -(ExistsOn:e)- Chain:c;
+    
+    // Get recent transfers
+    Transfers = SELECT w1, w2, e
+                FROM Tokens:t -(Involves)- Transaction:tx -(InBlock)- Block:b,
+                     Wallet:w1 -(Transfer:e)- Wallet:w2
+                WHERE e.timestamp >= cutoff_time
+                AND e.token_address == t.contract_address;
+    
+    PRINT Chains;
+    PRINT Transfers;
+}
+
+// Install all queries
+INSTALL QUERY GetWalletFlow24h
+INSTALL QUERY DetectClusters
+INSTALL QUERY GetTokenCrossChainFlow

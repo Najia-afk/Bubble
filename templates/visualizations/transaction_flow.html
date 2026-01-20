@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GHST Transaction Flow - Bubble</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://unpkg.com/vis-network@9.1.2/standalone/umd/vis-network.min.js"></script>
+    <style>
+        #network-graph {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            background: #1a1a1a;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        .control-group label {
+            display: inline-block;
+            width: 150px;
+            color: #fff;
+        }
+        .control-group select,
+        .control-group input {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            background: #333;
+            color: #fff;
+            min-width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>🫧 Bubble</h1>
+            <p>Transaction Flow Visualization</p>
+        </div>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/admin">Admin</a>
+            <a href="/visualize" class="active">Visualizations</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h2>GHST Transaction Flow Graph</h2>
+            <p>Last 24 hours • Interactive Network Visualization</p>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>Chain:</label>
+                <select id="chain-select" onchange="loadGraph()">
+                    <option value="POL">Polygon</option>
+                    <option value="BASE">Base</option>
+                    <option value="ALL">All Chains</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Time Window:</label>
+                <select id="time-select" onchange="loadGraph()">
+                    <option value="24">Last 24 hours</option>
+                    <option value="12">Last 12 hours</option>
+                    <option value="6">Last 6 hours</option>
+                    <option value="1">Last hour</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Min Transaction Value:</label>
+                <input type="number" id="min-value" placeholder="0" value="0" onchange="loadGraph()">
+            </div>
+
+            <div class="control-group">
+                <button onclick="loadGraph()" class="btn btn-primary">🔄 Refresh Graph</button>
+                <button onclick="detectClusters()" class="btn btn-secondary">🔍 Detect Clusters</button>
+                <button onclick="exportGraph()" class="btn btn-accent">💾 Export Data</button>
+            </div>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-mini">
+                <strong>Nodes:</strong> <span id="node-count">0</span>
+            </div>
+            <div class="stat-mini">
+                <strong>Edges:</strong> <span id="edge-count">0</span>
+            </div>
+            <div class="stat-mini">
+                <strong>Clusters:</strong> <span id="cluster-count">0</span>
+            </div>
+            <div class="stat-mini">
+                <strong>Total Volume:</strong> <span id="graph-volume">0 GHST</span>
+            </div>
+        </div>
+
+        <div id="network-graph"></div>
+
+        <div class="legend">
+            <h4>Legend</h4>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #00d4ff;"></span>
+                    <span>Regular Wallet</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #ff6b6b;"></span>
+                    <span>High Volume Wallet</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #51cf66;"></span>
+                    <span>Contract/Exchange</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #ffd43b;"></span>
+                    <span>Bridge Contract</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="node-details" id="node-details" style="display:none;">
+            <h4>Node Details</h4>
+            <div id="node-info"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/visualization.js"></script>
+</body>
+</html>

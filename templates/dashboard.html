@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bubble - GHST Transaction Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>🫧 Bubble</h1>
+            <p>Blockchain Analytics Platform</p>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="active">Dashboard</a>
+            <a href="/admin">Admin</a>
+            <a href="/visualize">Visualizations</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h2>GHST Token Analytics</h2>
+            <p>Real-time tracking across Polygon and Base networks</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <h3>Total Transactions (24h)</h3>
+                    <p class="stat-value" id="total-txs">Loading...</p>
+                    <span class="stat-label">Across all chains</span>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-content">
+                    <h3>Total Volume (24h)</h3>
+                    <p class="stat-value" id="total-volume">Loading...</p>
+                    <span class="stat-label">GHST tokens moved</span>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">🔗</div>
+                <div class="stat-content">
+                    <h3>Active Wallets</h3>
+                    <p class="stat-value" id="active-wallets">Loading...</p>
+                    <span class="stat-label">Unique addresses</span>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">🌐</div>
+                <div class="stat-content">
+                    <h3>Networks</h3>
+                    <p class="stat-value">2</p>
+                    <span class="stat-label">Polygon • Base</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <h3>Quick Actions</h3>
+            <div class="button-grid">
+                <button onclick="syncTokens()" class="btn btn-primary">
+                    🔄 Sync Tokens to TigerGraph
+                </button>
+                <button onclick="syncGHST()" class="btn btn-secondary">
+                    📥 Fetch GHST Transfers (24h)
+                </button>
+                <button onclick="syncFull()" class="btn btn-success">
+                    ⚡ Full Sync (All Data)
+                </button>
+                <button onclick="window.location.href='/visualize'" class="btn btn-accent">
+                    📈 View Transaction Graph
+                </button>
+            </div>
+        </div>
+
+        <div class="task-monitor">
+            <h3>Task Monitor</h3>
+            <div id="task-status" class="status-container">
+                <p class="placeholder">No active tasks</p>
+            </div>
+        </div>
+
+        <div class="chain-status">
+            <h3>Chain Status</h3>
+            <div class="chain-grid">
+                <div class="chain-card">
+                    <div class="chain-header">
+                        <span class="chain-icon">🟣</span>
+                        <h4>Polygon</h4>
+                        <span class="status-badge status-active">Active</span>
+                    </div>
+                    <div class="chain-info">
+                        <p><strong>GHST Address:</strong> <code>0x385e...4a7</code></p>
+                        <p><strong>Block Time:</strong> ~2 seconds</p>
+                        <p><strong>Scanner:</strong> Polygonscan</p>
+                    </div>
+                </div>
+
+                <div class="chain-card">
+                    <div class="chain-header">
+                        <span class="chain-icon">🔵</span>
+                        <h4>Base</h4>
+                        <span class="status-badge status-active">Active</span>
+                    </div>
+                    <div class="chain-info">
+                        <p><strong>GHST Address:</strong> <code>0x7645...Bff0</code></p>
+                        <p><strong>Block Time:</strong> ~2 seconds</p>
+                        <p><strong>Scanner:</strong> Basescan</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Bubble Analytics • Powered by TigerGraph & PostgreSQL</p>
+    </footer>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
