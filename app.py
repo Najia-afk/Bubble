@@ -95,6 +95,52 @@ def create_app():
     from api.routes import init_api_routes
     from datetime import datetime
     init_api_routes(app)
+    
+    # Setup GraphQL endpoint (manual - no flask-graphql needed)
+    from graphql_app.schemas.fetch_erc20_transfer_history_schema import schema as erc20_schema
+    
+    @app.route('/graphql', methods=['GET', 'POST'])
+    def graphql_endpoint():
+        """GraphQL endpoint with GraphiQL interface"""
+        if request.method == 'GET':
+            # Return GraphiQL HTML interface
+            return '''<!DOCTYPE html>
+<html>
+<head>
+    <title>Bubble GraphQL</title>
+    <link href="https://unpkg.com/graphiql/graphiql.min.css" rel="stylesheet" />
+</head>
+<body style="margin: 0;">
+    <div id="graphiql" style="height: 100vh;"></div>
+    <script crossorigin src="https://unpkg.com/react/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/graphiql/graphiql.min.js"></script>
+    <script>
+        const fetcher = GraphiQL.createFetcher({ url: '/graphql' });
+        ReactDOM.render(
+            React.createElement(GraphiQL, { fetcher: fetcher }),
+            document.getElementById('graphiql'),
+        );
+    </script>
+</body>
+</html>'''
+        
+        # POST - execute GraphQL query
+        data = request.get_json()
+        query = data.get('query', '')
+        variables = data.get('variables', {})
+        
+        result = erc20_schema.execute(
+            query,
+            variables=variables,
+            context={'session': g.db_session}
+        )
+        
+        response = {'data': result.data}
+        if result.errors:
+            response['errors'] = [str(e) for e in result.errors]
+        
+        return jsonify(response)
 
     return app
 

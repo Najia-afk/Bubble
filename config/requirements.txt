@@ -16,10 +16,10 @@ SQLAlchemy>=2.0.0
 psycopg2-binary>=2.9.0
 
 # GraphQL
-graphene>=3.0.0
+graphene>=3.1,<3.4
 graphene-sqlalchemy>=3.0.0rc2
-graphql-relay
-graphql-server-core
+graphql-core>=3.1,<3.3
+graphql-relay>=3.1,<3.3
 
 # Task Queue
 celery>=5.3.0

@@ -1,7 +1,8 @@
 #routes.py
 from celery_worker import celery_app
 from flask import Blueprint, request, jsonify, g, render_template
-from datetime import datetime
+from datetime import datetime, timedelta
+from sqlalchemy import text
 from api.tasks.tasks import fetch_erc20_transfer_history_task, fetch_token_price_history_task, fetch_last_token_price_history_task
 from api.tasks.fetch_token_data_task import fetch_token_data_task
 from api.tasks.tigergraph_tasks import sync_tokens_to_tigergraph, sync_ghst_transfers_24h, full_tigergraph_sync
@@ -21,6 +22,209 @@ def health_check():
         "timestamp": datetime.now().isoformat(),
         "service": "bubble-api"
     }), 200
+
+
+# ============================================================================
+# GRAPH DATA API FOR VISUALIZATION (uses GraphQL schema internally)
+# ============================================================================
+
+@api_bp.route("/graph/transfers", methods=['GET'])
+def get_graph_transfers():
+    """
+    Get transfer data for visualization graph - returns vis.js compatible JSON.
+    Internally uses the GraphQL schema to query data (no direct DB access).
+    """
+    chain = request.args.get('chain', 'POL').upper()
+    symbol = request.args.get('symbol', 'ghst').lower()
+    start_block = int(request.args.get('start_block', 1))
+    end_block = int(request.args.get('end_block', 999999999))
+    limit = int(request.args.get('limit', 500))
+    
+    try:
+        # Use the GraphQL schema to execute query
+        from graphql_app.schemas.fetch_erc20_transfer_history_schema import schema
+        
+        query = '''
+            query GetTransfers($trigram: String!, $symbols: [String]!, $startBlock: Int!, $endBlock: Int!, $limit: Int) {
+                erc20TransferEvents(trigram: $trigram, symbols: $symbols, startBlock: $startBlock, endBlock: $endBlock, limit: $limit) {
+                    edges {
+                        node {
+                            blockNumber
+                            hash
+                            fromContractAddress
+                            toContractAddress
+                            value
+                            tokenSymbol
+                            timestamp
+                        }
+                    }
+                    pageInfo {
+                        hasNextPage
+                        endCursor
+                    }
+                }
+            }
+        '''
+        
+        result = schema.execute(
+            query,
+            variables={
+                'trigram': chain,
+                'symbols': [symbol],
+                'startBlock': start_block,
+                'endBlock': end_block,
+                'limit': limit
+            },
+            context={'session': g.db_session}
+        )
+        
+        if result.errors:
+            return jsonify({
+                "nodes": [],
+                "edges": [],
+                "stats": {"total_transfers": 0, "unique_wallets": 0, "total_volume": 0},
+                "message": f"GraphQL errors: {[str(e) for e in result.errors]}"
+            }), 200
+        
+        # Transform GraphQL response to vis.js format
+        transfers = result.data.get('erc20TransferEvents', {}).get('edges', []) if result.data else []
+        
+        wallets = {}
+        edges = []
+        
+        for i, edge in enumerate(transfers):
+            tx = edge.get('node', {})
+            from_addr = tx.get('fromContractAddress', '')
+            to_addr = tx.get('toContractAddress', '')
+            value = float(tx.get('value', 0)) / 1e18
+            
+            if not from_addr or not to_addr:
+                continue
+            
+            # Create/update from node
+            if from_addr not in wallets:
+                wallets[from_addr] = {
+                    'id': from_addr,
+                    'label': f"{from_addr[:6]}...{from_addr[-4:]}",
+                    'out_count': 0, 'in_count': 0,
+                    'out_volume': 0, 'in_volume': 0
+                }
+            wallets[from_addr]['out_count'] += 1
+            wallets[from_addr]['out_volume'] += value
+            
+            # Create/update to node
+            if to_addr not in wallets:
+                wallets[to_addr] = {
+                    'id': to_addr,
+                    'label': f"{to_addr[:6]}...{to_addr[-4:]}",
+                    'out_count': 0, 'in_count': 0,
+                    'out_volume': 0, 'in_volume': 0
+                }
+            wallets[to_addr]['in_count'] += 1
+            wallets[to_addr]['in_volume'] += value
+            
+            edges.append({
+                'id': i,
+                'from': from_addr,
+                'to': to_addr,
+                'value': value,
+                'title': f"{value:.2f} {symbol.upper()}<br>Block: {tx.get('blockNumber', 'N/A')}",
+                'width': min(max(value / 100, 1), 8)
+            })
+        
+        # Classify nodes
+        nodes = []
+        for addr, data in wallets.items():
+            total_volume = data['out_volume'] + data['in_volume']
+            total_txs = data['out_count'] + data['in_count']
+            is_high_volume = total_volume > 10000
+            is_contract = total_txs > 50 or (data['in_count'] > 20 and data['out_count'] < 5)
+            
+            nodes.append({
+                'id': data['id'],
+                'label': data['label'],
+                'color': '#51cf66' if is_contract else '#ff6b6b' if is_high_volume else '#00d4ff',
+                'size': 35 if is_contract else 30 if is_high_volume else 20,
+                'title': f"Address: {addr}<br>In: {data['in_count']} txs ({data['in_volume']:.2f})<br>Out: {data['out_count']} txs ({data['out_volume']:.2f})"
+            })
+        
+        total_volume = sum(e['value'] for e in edges)
+        
+        return jsonify({
+            "nodes": nodes,
+            "edges": edges,
+            "stats": {
+                "total_transfers": len(edges),
+                "unique_wallets": len(nodes),
+                "total_volume": round(total_volume, 2)
+            }
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@api_bp.route("/stats/dashboard", methods=['GET'])
+def get_dashboard_stats():
+    """Get statistics for the dashboard via GraphQL schema"""
+    try:
+        from api.application.erc20models import Token
+        session = g.db_session
+        
+        stats = {
+            'tokens': session.query(Token).count(),
+            'transfers': 0,
+            'wallets': 0,
+            'chains': ['POL', 'BASE', 'ETH']
+        }
+        
+        # Use GraphQL to get transfer stats
+        from graphql_app.schemas.fetch_erc20_transfer_history_schema import schema
+        
+        query = '''
+            query GetStats($trigram: String!, $symbols: [String]!, $startBlock: Int!, $endBlock: Int!, $limit: Int) {
+                erc20TransferEvents(trigram: $trigram, symbols: $symbols, startBlock: $startBlock, endBlock: $endBlock, limit: $limit) {
+                    edges {
+                        node {
+                            fromContractAddress
+                            toContractAddress
+                        }
+                    }
+                }
+            }
+        '''
+        
+        result = schema.execute(
+            query,
+            variables={
+                'trigram': 'POL',
+                'symbols': ['ghst'],
+                'startBlock': 1,
+                'endBlock': 999999999,
+                'limit': 10000
+            },
+            context={'session': session}
+        )
+        
+        if result.data and result.data.get('erc20TransferEvents'):
+            edges = result.data['erc20TransferEvents'].get('edges', [])
+            stats['transfers'] = len(edges)
+            
+            # Count unique wallets
+            wallets = set()
+            for edge in edges:
+                node = edge.get('node', {})
+                if node.get('fromContractAddress'):
+                    wallets.add(node['fromContractAddress'])
+                if node.get('toContractAddress'):
+                    wallets.add(node['toContractAddress'])
+            stats['wallets'] = len(wallets)
+        
+        return jsonify(stats), 200
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 
 # ============================================================================

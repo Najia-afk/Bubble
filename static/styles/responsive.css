@@ -1,0 +1,185 @@
+/* =================================================================
+   Responsive Styles - Bubble Blockchain Analytics
+   Mobile-first responsive breakpoints
+================================================================= */
+
+/* Tablet and below (< 1024px) */
+@media (max-width: 1024px) {
+    :root {
+        --container-padding: 1rem;
+    }
+    
+    .grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .controls-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .control-group {
+        width: 100%;
+    }
+    
+    .control-group select,
+    .control-group input {
+        flex: 1;
+    }
+}
+
+/* Mobile (< 768px) */
+@media (max-width: 768px) {
+    .grid-4,
+    .grid-3,
+    .grid-2 {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Header */
+    .nav-links {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-card);
+        border-top: 1px solid var(--border-dark);
+        flex-direction: column;
+        padding: var(--spacing-md);
+    }
+    
+    .nav-links.active {
+        display: flex;
+    }
+    
+    .nav-links a {
+        width: 100%;
+        padding: var(--spacing-md);
+        border-radius: var(--radius-md);
+    }
+    
+    .menu-toggle {
+        display: flex;
+    }
+    
+    .nav-divider {
+        display: none;
+    }
+    
+    .api-status {
+        display: none;
+    }
+    
+    /* Page Header */
+    .page-header {
+        padding: var(--spacing-lg) 0;
+    }
+    
+    .page-title {
+        font-size: var(--font-size-2xl);
+    }
+    
+    /* Section Header */
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-md);
+    }
+    
+    /* Stats */
+    .stats-row {
+        flex-direction: column;
+    }
+    
+    .stat-mini {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    /* Visualization */
+    #network-graph {
+        height: 400px;
+    }
+    
+    .legend-items {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+    
+    /* Footer */
+    .footer-content {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .footer-links {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .footer-bottom {
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+}
+
+/* Small Mobile (< 480px) */
+@media (max-width: 480px) {
+    :root {
+        --font-size-4xl: 1.75rem;
+        --font-size-3xl: 1.5rem;
+        --font-size-2xl: 1.25rem;
+    }
+    
+    .stat-card .stat-value {
+        font-size: var(--font-size-2xl);
+    }
+    
+    .btn {
+        width: 100%;
+    }
+    
+    .btn-group {
+        flex-direction: column;
+    }
+    
+    .control-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .control-group label {
+        margin-bottom: var(--spacing-xs);
+    }
+}
+
+/* Print Styles */
+@media print {
+    header, footer, .controls-bar, .btn {
+        display: none !important;
+    }
+    
+    body {
+        background: white;
+        color: black;
+    }
+    
+    .card {
+        border: 1px solid #ccc;
+        box-shadow: none;
+    }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

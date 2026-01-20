@@ -29,19 +29,25 @@ def get_api_key(trigram):
     }
     return keys.get(trigram.upper(), Config.ETHERSCAN_API_KEY)
 
-def get_api_url(trigram, contract_address, from_block, to_block='latest'):
-    domain_mapping = {
-        "ETH": "api.etherscan.io",
-        "BSC": "api.bscscan.com",
-        "POL": "api.polygonscan.com",
-        "BASE": "api.basescan.org",
+def get_chain_id(trigram):
+    """Get chain ID for Etherscan V2 API"""
+    chain_ids = {
+        "ETH": 1,      # Ethereum Mainnet
+        "BSC": 56,     # BNB Smart Chain
+        "POL": 137,    # Polygon Mainnet
+        "BASE": 8453,  # Base Mainnet
     }
-    domain = domain_mapping.get(trigram.upper())
-    if not domain:
+    return chain_ids.get(trigram.upper())
+
+def get_api_url(trigram, contract_address, from_block, to_block='latest'):
+    """Generate Etherscan V2 API URL (multichain support)"""
+    chain_id = get_chain_id(trigram)
+    if not chain_id:
         raise ValueError(f"Unsupported blockchain trigram: {trigram}")
     
     api_key = get_api_key(trigram)
-    return f"https://{domain}/api?module=account&action=tokentx&contractaddress={contract_address}&startblock={from_block}&endblock={to_block}&sort=asc&apikey={api_key}"
+    # Using Etherscan V2 multichain API
+    return f"https://api.etherscan.io/v2/api?chainid={chain_id}&module=account&action=tokentx&contractaddress={contract_address}&startblock={from_block}&endblock={to_block}&sort=asc&apikey={api_key}"
 
 def fetch_erc20_transfer_data(contract_address, from_block, to_block, trigram):
     url = get_api_url(trigram, contract_address, from_block, to_block)
@@ -49,7 +55,8 @@ def fetch_erc20_transfer_data(contract_address, from_block, to_block, trigram):
     if response.status_code == 200 and response.json().get("status") == "1":
         return response.json().get("result")
     else:
-        erc20_tansfert_logger.info(f"Failed to fetch data for {contract_address}: {response.status_code}")
+        error_msg = response.json().get("message", "Unknown error") if response.status_code == 200 else f"HTTP {response.status_code}"
+        erc20_tansfert_logger.info(f"Failed to fetch data for {contract_address}: {error_msg}")
         return []
 
 def get_transfer_event_class(symbol, trigram):

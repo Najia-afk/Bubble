@@ -1,427 +1,345 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Token Management - Bubble Admin</title>
-    <link rel="stylesheet" href="/static/css/dashboard.css">
-</head>
-<body>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>🫧 Bubble Admin</h1>
-            <p>Token & Chain Management Console</p>
-        </div>
-        <div class="nav-links">
-            <a href="/">Dashboard</a>
-            <a href="/admin" class="active">Admin</a>
-            <a href="/visualize">Visualizations</a>
-        </div>
-    </nav>
+{% extends "base.html" %}
 
-    <div class="container">
-        <div class="header">
-            <h2>Token Management Console</h2>
-            <p>Add tokens, configure chains, and schedule fetching tasks</p>
-        </div>
+{% block title %}Admin - Token Management{% endblock %}
 
+{% block content %}
+<div class="page-header">
+    <div class="breadcrumb">
+        <a href="/">Dashboard</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">Admin</span>
+    </div>
+    <h1 class="page-title">Token Management</h1>
+    <p class="page-subtitle">Add tokens, configure chains, and schedule data fetching tasks</p>
+</div>
+
+<div class="grid grid-2">
+    <!-- Left Column: Add Token & Fetch Data -->
+    <div class="flex flex-col gap-lg">
+        
         <!-- Add Token Section -->
-        <div class="admin-section">
-            <h3>➕ Add New Token</h3>
-            <form id="add-token-form" class="admin-form">
-                <div class="form-row">
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title">Add New Token</h3>
+            </div>
+            <div class="panel-body">
+                <form id="add-token-form">
                     <div class="form-group">
-                        <label for="contract-address">Contract Address *</label>
-                        <input type="text" id="contract-address" required 
-                               placeholder="0x..." 
-                               pattern="0x[a-fA-F0-9]{40}">
-                        <small>Ethereum-format address (0x...)</small>
+                        <label class="form-label" for="contract-address">Contract Address</label>
+                        <input type="text" id="contract-address" class="form-control" 
+                               placeholder="0x..." pattern="0x[a-fA-F0-9]{40}" required>
                     </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="blockchain">Blockchain *</label>
-                        <select id="blockchain" required>
-                            <option value="">Select blockchain...</option>
-                            <option value="ethereum">Ethereum</option>
-                            <option value="binance-smart-chain">Binance Smart Chain (BSC)</option>
-                            <option value="polygon-pos">Polygon</option>
-                            <option value="base">Base</option>
-                        </select>
+                    
+                    <div class="grid grid-2 gap-md">
+                        <div class="form-group">
+                            <label class="form-label" for="blockchain">Blockchain</label>
+                            <select id="blockchain" class="form-control" required>
+                                <option value="">Select...</option>
+                                <option value="polygon-pos">Polygon</option>
+                                <option value="ethereum">Ethereum</option>
+                                <option value="base">Base</option>
+                                <option value="binance-smart-chain">BSC</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="trigram">Chain Trigram</label>
+                            <select id="trigram" class="form-control" required>
+                                <option value="">Select...</option>
+                                <option value="POL">POL (Polygon)</option>
+                                <option value="ETH">ETH (Ethereum)</option>
+                                <option value="BASE">BASE (Base)</option>
+                                <option value="BSC">BSC (BNB Chain)</option>
+                            </select>
+                        </div>
                     </div>
-
-                    <div class="form-group">
-                        <label for="trigram">Chain Trigram *</label>
-                        <select id="trigram" required>
-                            <option value="">Select trigram...</option>
-                            <option value="ETH">ETH - Ethereum</option>
-                            <option value="BSC">BSC - Binance Smart Chain</option>
-                            <option value="POL">POL - Polygon</option>
-                            <option value="BASE">BASE - Base</option>
-                        </select>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn btn-primary">
-                    ➕ Add Token & Generate Tables
-                </button>
-            </form>
-        </div>
-
-        <!-- Token List & Scheduling Section -->
-        <div class="admin-section">
-            <h3>📋 Registered Tokens</h3>
-            <div id="token-list" class="token-grid">
-                <p class="placeholder loading">Loading tokens...</p>
+                    
+                    <button type="submit" class="btn btn-primary">Add Token</button>
+                </form>
             </div>
         </div>
-
+        
         <!-- Schedule Fetch Section -->
-        <div class="admin-section" id="schedule-section" style="display:none;">
-            <h3>📅 Schedule Token Fetch</h3>
-            <form id="schedule-form" class="admin-form">
-                <input type="hidden" id="schedule-token-id">
-                <input type="hidden" id="schedule-symbol">
-
-                <div class="selected-token-info">
-                    <h4 id="schedule-token-name">Token</h4>
-                    <p id="schedule-token-address"></p>
-                </div>
-
-                <div class="form-group">
-                    <label>Select Chains to Track *</label>
-                    <div id="chain-selector" class="chain-buttons">
-                        <!-- Dynamic chain buttons will be inserted here -->
-                    </div>
-                    <small>Select one or more chains where this token exists</small>
-                </div>
-
-                <div class="form-row">
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title">Fetch Token Data</h3>
+            </div>
+            <div class="panel-body">
+                <form id="fetch-form">
                     <div class="form-group">
-                        <label for="start-date">Start Date *</label>
-                        <input type="date" id="start-date" required>
-                        <small>Fetch data from this date</small>
+                        <label class="form-label" for="fetch-symbol">Token Symbol</label>
+                        <input type="text" id="fetch-symbol" class="form-control" 
+                               placeholder="e.g., ghst, gltr" required>
                     </div>
-
+                    
                     <div class="form-group">
-                        <label for="end-date">End Date</label>
-                        <input type="date" id="end-date">
-                        <small>Leave empty for "now"</small>
+                        <label class="form-label">Chains</label>
+                        <div class="flex gap-md flex-wrap">
+                            <label class="flex items-center gap-sm">
+                                <input type="checkbox" name="fetch-chains" value="POL" checked>
+                                <span>Polygon</span>
+                            </label>
+                            <label class="flex items-center gap-sm">
+                                <input type="checkbox" name="fetch-chains" value="ETH">
+                                <span>Ethereum</span>
+                            </label>
+                            <label class="flex items-center gap-sm">
+                                <input type="checkbox" name="fetch-chains" value="BASE">
+                                <span>Base</span>
+                            </label>
+                        </div>
                     </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="fetch-mode">Fetch Mode *</label>
-                        <select id="fetch-mode" required>
-                            <option value="price_history">Price History Only</option>
-                            <option value="transfers">Transfer Events Only</option>
-                            <option value="both" selected>Both (Price + Transfers)</option>
-                        </select>
+                    
+                    <div class="grid grid-2 gap-md">
+                        <div class="form-group">
+                            <label class="form-label" for="start-block">Start Block</label>
+                            <input type="number" id="start-block" class="form-control" 
+                                   value="1" min="1">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="end-block">End Block</label>
+                            <input type="number" id="end-block" class="form-control" 
+                                   value="999999999">
+                        </div>
                     </div>
-                </div>
-
-                <div class="button-group">
-                    <button type="submit" class="btn btn-success">
-                        ⚡ Start Fetch Now
-                    </button>
-                    <button type="button" onclick="cancelSchedule()" class="btn btn-secondary">
-                        ❌ Cancel
-                    </button>
-                </div>
-            </form>
+                    
+                    <button type="submit" class="btn btn-accent">Start Fetch Task</button>
+                </form>
+            </div>
         </div>
-
-        <!-- Chain Configuration Section -->
-        <div class="admin-section">
-            <h3>🔗 Chain Configuration</h3>
-            <div class="chain-config-grid">
-                <div class="chain-config-card">
-                    <div class="chain-header">
-                        <span class="chain-icon">Ξ</span>
-                        <h4>Ethereum (ETH)</h4>
-                        <span class="status-badge status-active">Active</span>
-                    </div>
-                    <div class="chain-details">
-                        <p><strong>Platform ID:</strong> <code>ethereum</code></p>
-                        <p><strong>Scanner:</strong> Etherscan</p>
-                        <p><strong>API:</strong> <code>api.etherscan.io</code></p>
-                        <p><strong>Block Time:</strong> ~12s</p>
-                    </div>
-                </div>
-
-                <div class="chain-config-card">
-                    <div class="chain-header">
-                        <span class="chain-icon">🟡</span>
-                        <h4>Binance SC (BSC)</h4>
-                        <span class="status-badge status-active">Active</span>
-                    </div>
-                    <div class="chain-details">
-                        <p><strong>Platform ID:</strong> <code>binance-smart-chain</code></p>
-                        <p><strong>Scanner:</strong> BSCscan</p>
-                        <p><strong>API:</strong> <code>api.bscscan.com</code></p>
-                        <p><strong>Block Time:</strong> ~3s</p>
-                    </div>
-                </div>
-
-                <div class="chain-config-card">
-                    <div class="chain-header">
-                        <span class="chain-icon">🟣</span>
-                        <h4>Polygon (POL)</h4>
-                        <span class="status-badge status-active">Active</span>
-                    </div>
-                    <div class="chain-details">
-                        <p><strong>Platform ID:</strong> <code>polygon-pos</code></p>
-                        <p><strong>Scanner:</strong> Polygonscan</p>
-                        <p><strong>API:</strong> <code>api.polygonscan.com</code></p>
-                        <p><strong>Block Time:</strong> ~2s</p>
-                    </div>
-                </div>
-
-                <div class="chain-config-card">
-                    <div class="chain-header">
-                        <span class="chain-icon">🔵</span>
-                        <h4>Base (BASE)</h4>
-                        <span class="status-badge status-active">Active</span>
-                    </div>
-                    <div class="chain-details">
-                        <p><strong>Platform ID:</strong> <code>base</code></p>
-                        <p><strong>Scanner:</strong> Basescan</p>
-                        <p><strong>API:</strong> <code>api.basescan.org</code></p>
-                        <p><strong>Block Time:</strong> ~2s</p>
+        
+    </div>
+    
+    <!-- Right Column: Token List & Tasks -->
+    <div class="flex flex-col gap-lg">
+        
+        <!-- Registered Tokens -->
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title">Registered Tokens</h3>
+                <button onclick="loadTokens()" class="btn btn-secondary btn-sm">Refresh</button>
+            </div>
+            <div class="panel-body">
+                <div id="tokens-list">
+                    <div class="empty-state">
+                        <div class="spinner" style="margin: 0 auto;"></div>
+                        <p class="mt-md">Loading tokens...</p>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- Active Tasks Monitor -->
-        <div class="admin-section">
-            <h3>📊 Active Fetch Tasks</h3>
-            <div id="active-tasks" class="tasks-list">
-                <p class="placeholder">No active tasks</p>
+        
+        <!-- Active Tasks -->
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title">Recent Tasks</h3>
             </div>
+            <div class="panel-body">
+                <div id="tasks-list">
+                    <div class="empty-state">
+                        <p class="text-muted">No recent tasks</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<section class="section mt-xl">
+    <div class="section-header">
+        <h2 class="section-title">Quick Actions</h2>
+    </div>
+    
+    <div class="grid grid-auto">
+        <div class="card">
+            <h4>Fetch GHST Transfers</h4>
+            <p class="text-muted">Quick fetch for GHST token on Polygon</p>
+            <button onclick="quickFetchGHST()" class="btn btn-primary btn-sm mt-md">
+                Fetch GHST POL
+            </button>
+        </div>
+        
+        <div class="card">
+            <h4>Check Task Status</h4>
+            <p class="text-muted">Check status of a running task</p>
+            <div class="flex gap-sm mt-md">
+                <input type="text" id="task-id-input" class="form-control" placeholder="Task ID">
+                <button onclick="checkTaskStatus()" class="btn btn-secondary">Check</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h4>API Documentation</h4>
+            <p class="text-muted">Explore GraphQL API endpoint</p>
+            <a href="/graphql" target="_blank" class="btn btn-secondary btn-sm mt-md">
+                Open GraphiQL
+            </a>
         </div>
     </div>
+</section>
+{% endblock %}
 
-    <style>
-        .admin-section {
-            background: var(--bg-card);
-            border-radius: 12px;
-            padding: 2rem;
-            margin-bottom: 2rem;
+{% block extra_js %}
+<script>
+    // Load tokens on page load
+    async function loadTokens() {
+        const container = document.getElementById('tokens-list');
+        
+        try {
+            const response = await fetch('/api/tokens/list');
+            const data = await response.json();
+            
+            if (data.tokens && data.tokens.length > 0) {
+                container.innerHTML = data.tokens.map(token => `
+                    <div class="flex items-center justify-between p-md" style="border-bottom: 1px solid var(--border-dark);">
+                        <div>
+                            <strong>${token.symbol}</strong>
+                            <span class="badge badge-primary ml-sm">${token.trigram}</span>
+                            <p class="text-muted" style="margin:0;font-size:var(--font-size-xs);">
+                                ${token.name || 'Unknown'}
+                            </p>
+                        </div>
+                        <code class="text-muted" style="font-size:var(--font-size-xs);">
+                            ${token.contract_address?.slice(0,10)}...
+                        </code>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <p>No tokens registered yet.</p>
+                        <p class="text-muted">Add a token using the form above.</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            container.innerHTML = `<div class="alert alert-danger">Failed to load tokens: ${error.message}</div>`;
         }
-
-        .admin-section h3 {
-            margin-bottom: 1.5rem;
-            border-bottom: 2px solid var(--border);
-            padding-bottom: 0.5rem;
+    }
+    
+    // Add token form
+    document.getElementById('add-token-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const payload = {
+            contract_address: document.getElementById('contract-address').value,
+            blockchain: document.getElementById('blockchain').value,
+            trigram: document.getElementById('trigram').value
+        };
+        
+        try {
+            const response = await fetch('/api/tokens/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                showNotification('Token added successfully!', 'success');
+                this.reset();
+                loadTokens();
+            } else {
+                showNotification(data.error || 'Failed to add token', 'error');
+            }
+        } catch (error) {
+            showNotification('Error: ' + error.message, 'error');
         }
-
-        .admin-form {
-            max-width: 800px;
+    });
+    
+    // Fetch form
+    document.getElementById('fetch-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const chains = Array.from(document.querySelectorAll('input[name="fetch-chains"]:checked'))
+            .map(cb => cb.value);
+        
+        if (chains.length === 0) {
+            showNotification('Please select at least one chain', 'warning');
+            return;
         }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 1.5rem;
+        
+        const payload = {
+            trigram: chains[0],
+            symbols: document.getElementById('fetch-symbol').value.split(',').map(s => s.trim()),
+            startBlock: parseInt(document.getElementById('start-block').value),
+            endBlock: parseInt(document.getElementById('end-block').value)
+        };
+        
+        try {
+            const response = await fetch('/api/get_erc20_transfer_history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify([payload])
+            });
+            
+            const data = await response.json();
+            
+            if (data.task_id) {
+                showNotification(`Task started! ID: ${data.task_id}`, 'success');
+                addTaskToList(data.task_id);
+            } else {
+                showNotification(data.error || 'Failed to start task', 'error');
+            }
+        } catch (error) {
+            showNotification('Error: ' + error.message, 'error');
         }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
+    });
+    
+    // Quick GHST fetch
+    async function quickFetchGHST() {
+        try {
+            const response = await fetch('/api/get_erc20_transfer_history?trigram=POL&symbols=ghst&startBlock=1&endBlock=999999999');
+            const data = await response.json();
+            
+            if (data.task_id) {
+                showNotification(`GHST fetch started! Task ID: ${data.task_id}`, 'success');
+                addTaskToList(data.task_id);
+            }
+        } catch (error) {
+            showNotification('Error: ' + error.message, 'error');
         }
-
-        .form-group label {
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: var(--text-primary);
+    }
+    
+    // Check task status
+    async function checkTaskStatus() {
+        const taskId = document.getElementById('task-id-input').value;
+        if (!taskId) {
+            showNotification('Please enter a task ID', 'warning');
+            return;
         }
-
-        .form-group input,
-        .form-group select {
-            padding: 0.75rem;
-            background: var(--bg-dark);
-            border: 2px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 1rem;
+        
+        try {
+            const response = await fetch(`/api/task_status/${taskId}`);
+            const data = await response.json();
+            
+            showNotification(`Task ${taskId}: ${data.state}`, data.state === 'SUCCESS' ? 'success' : 'info');
+        } catch (error) {
+            showNotification('Error: ' + error.message, 'error');
         }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        .form-group small {
-            margin-top: 0.25rem;
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-        }
-
-        .token-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1rem;
-        }
-
-        .token-card {
-            background: var(--bg-dark);
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            padding: 1.5rem;
-            transition: all 0.3s;
-            cursor: pointer;
-        }
-
-        .token-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-2px);
-        }
-
-        .token-card h4 {
-            margin-bottom: 0.5rem;
-            color: var(--primary);
-        }
-
-        .token-card .token-symbol {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: var(--text-primary);
-        }
-
-        .token-card .token-address {
-            font-family: monospace;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin: 0.5rem 0;
-        }
-
-        .token-card .token-chain {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            background: var(--secondary);
-            border-radius: 12px;
-            font-size: 0.85rem;
-            margin-top: 0.5rem;
-        }
-
-        .chain-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-        }
-
-        .chain-btn {
-            padding: 0.75rem 1.5rem;
-            background: var(--bg-dark);
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            color: var(--text-primary);
-            cursor: pointer;
-            transition: all 0.3s;
-            font-weight: 600;
-        }
-
-        .chain-btn:hover {
-            border-color: var(--success);
-        }
-
-        .chain-btn.selected {
-            background: var(--success);
-            border-color: var(--success);
-            color: var(--bg-dark);
-        }
-
-        .chain-config-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .chain-config-card {
-            background: var(--bg-dark);
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            padding: 1.5rem;
-        }
-
-        .chain-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .chain-icon {
-            font-size: 2rem;
-        }
-
-        .chain-details p {
-            margin: 0.5rem 0;
-            font-size: 0.9rem;
-        }
-
-        .chain-details code {
-            background: var(--bg-card);
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.85rem;
-        }
-
-        .selected-token-info {
-            background: var(--bg-dark);
-            border-left: 4px solid var(--primary);
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-            border-radius: 4px;
-        }
-
-        .selected-token-info h4 {
-            margin: 0 0 0.5rem 0;
-            color: var(--primary);
-        }
-
-        .selected-token-info p {
-            margin: 0;
-            font-family: monospace;
-            color: var(--text-secondary);
-        }
-
-        .button-group {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1.5rem;
-        }
-
-        .tasks-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .task-item {
-            background: var(--bg-dark);
-            border-left: 4px solid var(--primary);
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: 4px;
-        }
-
-        .task-item.success {
-            border-left-color: var(--success);
-        }
-
-        .task-item.error {
-            border-left-color: var(--danger);
-        }
-    </style>
-
-    <script src="/static/js/admin.js"></script>
-</body>
-</html>
+    }
+    
+    // Add task to list
+    function addTaskToList(taskId) {
+        const container = document.getElementById('tasks-list');
+        const existing = container.querySelector('.empty-state');
+        if (existing) existing.remove();
+        
+        const taskEl = document.createElement('div');
+        taskEl.className = 'flex items-center justify-between p-md';
+        taskEl.style.borderBottom = '1px solid var(--border-dark)';
+        taskEl.innerHTML = `
+            <code>${taskId.slice(0, 8)}...</code>
+            <span class="badge badge-warning">PENDING</span>
+        `;
+        container.prepend(taskEl);
+    }
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', loadTokens);
+</script>
+{% endblock %}

@@ -1,140 +1,274 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GHST Transaction Flow - Bubble</title>
-    <link rel="stylesheet" href="/static/css/dashboard.css">
-    <script src="https://unpkg.com/vis-network@9.1.2/standalone/umd/vis-network.min.js"></script>
-    <style>
-        #network-graph {
-            width: 100%;
-            height: 600px;
-            border: 2px solid #333;
-            border-radius: 8px;
-            background: #1a1a1a;
-        }
-        .controls {
-            margin: 20px 0;
-            padding: 20px;
-            background: #2a2a2a;
-            border-radius: 8px;
-        }
-        .control-group {
-            margin: 10px 0;
-        }
-        .control-group label {
-            display: inline-block;
-            width: 150px;
-            color: #fff;
-        }
-        .control-group select,
-        .control-group input {
-            padding: 8px;
-            border-radius: 4px;
-            border: 1px solid #444;
-            background: #333;
-            color: #fff;
-            min-width: 200px;
-        }
-    </style>
-</head>
-<body>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>🫧 Bubble</h1>
-            <p>Transaction Flow Visualization</p>
-        </div>
-        <div class="nav-links">
-            <a href="/">Dashboard</a>
-            <a href="/admin">Admin</a>
-            <a href="/visualize" class="active">Visualizations</a>
-        </div>
-    </nav>
+{% extends "base.html" %}
 
-    <div class="container">
-        <div class="header">
-            <h2>GHST Transaction Flow Graph</h2>
-            <p>Last 24 hours • Interactive Network Visualization</p>
-        </div>
+{% block title %}Transaction Graph{% endblock %}
 
-        <div class="controls">
-            <div class="control-group">
-                <label>Chain:</label>
-                <select id="chain-select" onchange="loadGraph()">
-                    <option value="POL">Polygon</option>
-                    <option value="BASE">Base</option>
-                    <option value="ALL">All Chains</option>
-                </select>
-            </div>
-            
-            <div class="control-group">
-                <label>Time Window:</label>
-                <select id="time-select" onchange="loadGraph()">
-                    <option value="24">Last 24 hours</option>
-                    <option value="12">Last 12 hours</option>
-                    <option value="6">Last 6 hours</option>
-                    <option value="1">Last hour</option>
-                </select>
-            </div>
+{% block extra_css %}
+<script src="https://unpkg.com/vis-network@9.1.2/standalone/umd/vis-network.min.js"></script>
+{% endblock %}
 
-            <div class="control-group">
-                <label>Min Transaction Value:</label>
-                <input type="number" id="min-value" placeholder="0" value="0" onchange="loadGraph()">
-            </div>
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Transaction Flow Graph</h1>
+    <p class="page-subtitle">Visualize token transfer patterns • Powered by GraphQL API</p>
+</div>
 
-            <div class="control-group">
-                <button onclick="loadGraph()" class="btn btn-primary">🔄 Refresh Graph</button>
-                <button onclick="detectClusters()" class="btn btn-secondary">🔍 Detect Clusters</button>
-                <button onclick="exportGraph()" class="btn btn-accent">💾 Export Data</button>
-            </div>
-        </div>
-
-        <div class="stats-row">
-            <div class="stat-mini">
-                <strong>Nodes:</strong> <span id="node-count">0</span>
-            </div>
-            <div class="stat-mini">
-                <strong>Edges:</strong> <span id="edge-count">0</span>
-            </div>
-            <div class="stat-mini">
-                <strong>Clusters:</strong> <span id="cluster-count">0</span>
-            </div>
-            <div class="stat-mini">
-                <strong>Total Volume:</strong> <span id="graph-volume">0 GHST</span>
-            </div>
-        </div>
-
-        <div id="network-graph"></div>
-
-        <div class="legend">
-            <h4>Legend</h4>
-            <div class="legend-items">
-                <div class="legend-item">
-                    <span class="legend-color" style="background: #00d4ff;"></span>
-                    <span>Regular Wallet</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background: #ff6b6b;"></span>
-                    <span>High Volume Wallet</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background: #51cf66;"></span>
-                    <span>Contract/Exchange</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background: #ffd43b;"></span>
-                    <span>Bridge Contract</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="node-details" id="node-details" style="display:none;">
-            <h4>Node Details</h4>
-            <div id="node-info"></div>
-        </div>
+<!-- Controls -->
+<div class="controls-bar">
+    <div class="control-group">
+        <label for="chain-select">Chain:</label>
+        <select id="chain-select" class="form-control">
+            <option value="POL">Polygon</option>
+            <option value="BASE">Base</option>
+            <option value="ETH">Ethereum</option>
+        </select>
+    </div>
+    
+    <div class="control-group">
+        <label for="symbol-select">Token:</label>
+        <select id="symbol-select" class="form-control">
+            <option value="ghst">GHST</option>
+            <option value="gltr">GLTR</option>
+            <option value="kek">KEK</option>
+            <option value="fud">FUD</option>
+        </select>
+    </div>
+    
+    <div class="control-group">
+        <label for="limit-select">Transactions:</label>
+        <select id="limit-select" class="form-control">
+            <option value="100">100</option>
+            <option value="250">250</option>
+            <option value="500" selected>500</option>
+            <option value="1000">1,000</option>
+        </select>
     </div>
 
-    <script src="/static/js/visualization.js"></script>
-</body>
-</html>
+    <div class="control-group" style="margin-left: auto;">
+        <button onclick="loadGraph()" class="btn btn-primary">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+            </svg>
+            Load Graph
+        </button>
+        <button onclick="exportGraph()" class="btn btn-secondary">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+            </svg>
+            Export
+        </button>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="stats-row">
+    <div class="stat-mini">
+        <strong>Nodes:</strong>
+        <span id="node-count">0</span>
+    </div>
+    <div class="stat-mini">
+        <strong>Edges:</strong>
+        <span id="edge-count">0</span>
+    </div>
+    <div class="stat-mini">
+        <strong>Volume:</strong>
+        <span id="graph-volume">0</span>
+    </div>
+    <div class="stat-mini">
+        <strong>Source:</strong>
+        <span id="data-source">GraphQL API</span>
+    </div>
+</div>
+
+<!-- Graph Visualization -->
+<div class="visualization-container">
+    <div id="network-graph"></div>
+    
+    <div class="legend">
+        <h4>Legend</h4>
+        <div class="legend-items">
+            <div class="legend-item">
+                <span class="legend-color" style="background: #00d4ff;"></span>
+                <span>Regular Wallet</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #ff6b6b;"></span>
+                <span>High Volume (>10K)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #51cf66;"></span>
+                <span>Contract / Exchange</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Node Details -->
+<div class="node-details" id="node-details" style="display:none;">
+    <h4>Selected Node</h4>
+    <div id="node-info"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let network = null;
+    let nodes = new vis.DataSet([]);
+    let edges = new vis.DataSet([]);
+    
+    // Initialize the network graph
+    function initGraph() {
+        const container = document.getElementById('network-graph');
+        
+        const data = { nodes: nodes, edges: edges };
+        
+        const options = {
+            nodes: {
+                shape: 'dot',
+                size: 20,
+                font: { size: 12, color: '#ffffff' },
+                borderWidth: 2,
+                shadow: true
+            },
+            edges: {
+                width: 2,
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                smooth: { type: 'continuous' },
+                shadow: true,
+                color: { color: '#666', highlight: '#00d4ff' }
+            },
+            physics: {
+                enabled: true,
+                stabilization: { iterations: 200 },
+                barnesHut: {
+                    gravitationalConstant: -8000,
+                    centralGravity: 0.3,
+                    springLength: 150,
+                    springConstant: 0.04
+                }
+            },
+            interaction: { hover: true, tooltipDelay: 200 }
+        };
+        
+        network = new vis.Network(container, data, options);
+        
+        network.on('click', function(params) {
+            if (params.nodes.length > 0) {
+                showNodeDetails(params.nodes[0]);
+            }
+        });
+        
+        network.on('hoverNode', function() {
+            network.canvas.body.container.style.cursor = 'pointer';
+        });
+        
+        network.on('blurNode', function() {
+            network.canvas.body.container.style.cursor = 'default';
+        });
+    }
+    
+    // Load graph data from GraphQL API
+    async function loadGraph() {
+        const chain = document.getElementById('chain-select').value;
+        const symbol = document.getElementById('symbol-select').value;
+        const limit = document.getElementById('limit-select').value;
+        
+        showNotification('Loading transaction graph via GraphQL...', 'info');
+        
+        try {
+            // Call our REST endpoint which internally uses GraphQL
+            const url = `/api/graph/transfers?chain=${chain}&symbol=${symbol}&limit=${limit}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.error) {
+                showNotification(`Error: ${data.error}`, 'error');
+                console.error(data.traceback);
+                return;
+            }
+            
+            // Clear and add new data
+            nodes.clear();
+            edges.clear();
+            
+            if (data.nodes && data.nodes.length > 0) {
+                nodes.add(data.nodes);
+                edges.add(data.edges);
+                
+                // Update stats
+                document.getElementById('node-count').textContent = data.stats.unique_wallets;
+                document.getElementById('edge-count').textContent = data.stats.total_transfers;
+                document.getElementById('graph-volume').textContent = data.stats.total_volume.toLocaleString() + ' ' + symbol.toUpperCase();
+                
+                showNotification(`Loaded ${data.stats.total_transfers} transfers from ${data.stats.unique_wallets} wallets`, 'success');
+            } else {
+                showNotification('No transfer data found. Try fetching data first via Admin panel.', 'warning');
+            }
+            
+        } catch (error) {
+            console.error('Error loading graph:', error);
+            showNotification('Failed to load graph: ' + error.message, 'error');
+        }
+    }
+    
+    function showNodeDetails(nodeId) {
+        const node = nodes.get(nodeId);
+        const detailsDiv = document.getElementById('node-details');
+        const infoDiv = document.getElementById('node-info');
+        
+        const connectedEdges = network.getConnectedEdges(nodeId);
+        const incomingTxs = connectedEdges.filter(edgeId => {
+            const edge = edges.get(edgeId);
+            return edge.to === nodeId;
+        });
+        const outgoingTxs = connectedEdges.filter(edgeId => {
+            const edge = edges.get(edgeId);
+            return edge.from === nodeId;
+        });
+        
+        infoDiv.innerHTML = `
+            <p><strong>Address:</strong> <code>${nodeId}</code></p>
+            <p><strong>Incoming:</strong> ${incomingTxs.length} transactions</p>
+            <p><strong>Outgoing:</strong> ${outgoingTxs.length} transactions</p>
+            <p><strong>Total Connections:</strong> ${connectedEdges.length}</p>
+            <p class="mt-md">
+                <a href="https://polygonscan.com/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">
+                    View on Explorer
+                </a>
+            </p>
+        `;
+        
+        detailsDiv.style.display = 'block';
+    }
+    
+    function exportGraph() {
+        const exportData = {
+            nodes: nodes.get(),
+            edges: edges.get(),
+            metadata: {
+                chain: document.getElementById('chain-select').value,
+                symbol: document.getElementById('symbol-select').value,
+                exportedAt: new Date().toISOString()
+            }
+        };
+        
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bubble-graph-${exportData.metadata.chain}-${exportData.metadata.symbol}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        showNotification('Graph exported successfully', 'success');
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        initGraph();
+        // Auto-load graph on page load
+        setTimeout(loadGraph, 500);
+    });
+</script>
+{% endblock %}

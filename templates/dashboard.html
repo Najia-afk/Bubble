@@ -1,130 +1,222 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bubble - GHST Transaction Dashboard</title>
-    <link rel="stylesheet" href="/static/css/dashboard.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-</head>
-<body>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>🫧 Bubble</h1>
-            <p>Blockchain Analytics Platform</p>
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-subtitle">Blockchain analytics overview • Real-time ERC20 token data</p>
+</div>
+
+<!-- Stats Cards -->
+<section class="section">
+    <div class="grid grid-4">
+        <div class="card stat-card">
+            <div class="stat-icon">🪙</div>
+            <div class="stat-value" id="stat-tokens">-</div>
+            <div class="stat-label">Tracked Tokens</div>
         </div>
-        <div class="nav-links">
-            <a href="/" class="active">Dashboard</a>
-            <a href="/admin">Admin</a>
-            <a href="/visualize">Visualizations</a>
+        
+        <div class="card stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-value" id="stat-transfers">-</div>
+            <div class="stat-label">Total Transfers</div>
         </div>
-    </nav>
-
-    <div class="container">
-        <div class="header">
-            <h2>GHST Token Analytics</h2>
-            <p>Real-time tracking across Polygon and Base networks</p>
+        
+        <div class="card stat-card">
+            <div class="stat-icon">👛</div>
+            <div class="stat-value" id="stat-wallets">-</div>
+            <div class="stat-label">Unique Wallets</div>
         </div>
+        
+        <div class="card stat-card">
+            <div class="stat-icon">⛓️</div>
+            <div class="stat-value" id="stat-chains">-</div>
+            <div class="stat-label">Active Chains</div>
+        </div>
+    </div>
+</section>
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon">📊</div>
-                <div class="stat-content">
-                    <h3>Total Transactions (24h)</h3>
-                    <p class="stat-value" id="total-txs">Loading...</p>
-                    <span class="stat-label">Across all chains</span>
-                </div>
+<!-- Quick Actions -->
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Quick Actions</h2>
+    </div>
+    
+    <div class="grid grid-3">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">📈 Fetch Token Data</h3>
             </div>
-
-            <div class="stat-card">
-                <div class="stat-icon">💰</div>
-                <div class="stat-content">
-                    <h3>Total Volume (24h)</h3>
-                    <p class="stat-value" id="total-volume">Loading...</p>
-                    <span class="stat-label">GHST tokens moved</span>
-                </div>
+            <div class="card-body">
+                <p>Fetch ERC20 transfer history and price data from blockchain APIs.</p>
             </div>
-
-            <div class="stat-card">
-                <div class="stat-icon">🔗</div>
-                <div class="stat-content">
-                    <h3>Active Wallets</h3>
-                    <p class="stat-value" id="active-wallets">Loading...</p>
-                    <span class="stat-label">Unique addresses</span>
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon">🌐</div>
-                <div class="stat-content">
-                    <h3>Networks</h3>
-                    <p class="stat-value">2</p>
-                    <span class="stat-label">Polygon • Base</span>
-                </div>
+            <div class="card-footer">
+                <a href="/admin" class="btn btn-primary">Go to Admin Panel</a>
             </div>
         </div>
-
-        <div class="actions">
-            <h3>Quick Actions</h3>
-            <div class="button-grid">
-                <button onclick="syncTokens()" class="btn btn-primary">
-                    🔄 Sync Tokens to TigerGraph
-                </button>
-                <button onclick="syncGHST()" class="btn btn-secondary">
-                    📥 Fetch GHST Transfers (24h)
-                </button>
-                <button onclick="syncFull()" class="btn btn-success">
-                    ⚡ Full Sync (All Data)
-                </button>
-                <button onclick="window.location.href='/visualize'" class="btn btn-accent">
-                    📈 View Transaction Graph
-                </button>
+        
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">🕸️ Transaction Graph</h3>
+            </div>
+            <div class="card-body">
+                <p>Visualize token transfer flows and identify wallet clusters.</p>
+            </div>
+            <div class="card-footer">
+                <a href="/visualize" class="btn btn-primary">Open Visualization</a>
             </div>
         </div>
-
-        <div class="task-monitor">
-            <h3>Task Monitor</h3>
-            <div id="task-status" class="status-container">
-                <p class="placeholder">No active tasks</p>
+        
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">🔌 GraphQL API</h3>
+            </div>
+            <div class="card-body">
+                <p>Query blockchain data programmatically via GraphQL endpoint.</p>
+            </div>
+            <div class="card-footer">
+                <a href="/graphql" target="_blank" class="btn btn-secondary">Open GraphiQL</a>
             </div>
         </div>
+    </div>
+</section>
 
-        <div class="chain-status">
-            <h3>Chain Status</h3>
-            <div class="chain-grid">
-                <div class="chain-card">
-                    <div class="chain-header">
-                        <span class="chain-icon">🟣</span>
-                        <h4>Polygon</h4>
-                        <span class="status-badge status-active">Active</span>
-                    </div>
-                    <div class="chain-info">
-                        <p><strong>GHST Address:</strong> <code>0x385e...4a7</code></p>
-                        <p><strong>Block Time:</strong> ~2 seconds</p>
-                        <p><strong>Scanner:</strong> Polygonscan</p>
+<!-- System Status -->
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">System Status</h2>
+        <button onclick="checkHealth()" class="btn btn-secondary btn-sm">Refresh</button>
+    </div>
+    
+    <div class="panel">
+        <div class="panel-body">
+            <div class="grid grid-4">
+                <div class="flex items-center gap-md">
+                    <span class="badge badge-success">●</span>
+                    <div>
+                        <strong>API Server</strong>
+                        <p class="text-muted" style="margin:0;font-size:var(--font-size-sm);">Flask running</p>
                     </div>
                 </div>
-
-                <div class="chain-card">
-                    <div class="chain-header">
-                        <span class="chain-icon">🔵</span>
-                        <h4>Base</h4>
-                        <span class="status-badge status-active">Active</span>
+                
+                <div class="flex items-center gap-md">
+                    <span class="badge badge-success" id="celery-status">●</span>
+                    <div>
+                        <strong>Task Queue</strong>
+                        <p class="text-muted" style="margin:0;font-size:var(--font-size-sm);">Celery active</p>
                     </div>
-                    <div class="chain-info">
-                        <p><strong>GHST Address:</strong> <code>0x7645...Bff0</code></p>
-                        <p><strong>Block Time:</strong> ~2 seconds</p>
-                        <p><strong>Scanner:</strong> Basescan</p>
+                </div>
+                
+                <div class="flex items-center gap-md">
+                    <span class="badge badge-success" id="db-status">●</span>
+                    <div>
+                        <strong>Database</strong>
+                        <p class="text-muted" style="margin:0;font-size:var(--font-size-sm);">PostgreSQL connected</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-md">
+                    <span class="badge badge-success" id="redis-status">●</span>
+                    <div>
+                        <strong>Cache</strong>
+                        <p class="text-muted" style="margin:0;font-size:var(--font-size-sm);">Redis ready</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+</section>
 
-    <footer>
-        <p>Bubble Analytics • Powered by TigerGraph & PostgreSQL</p>
-    </footer>
+<!-- Supported Chains -->
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Supported Chains</h2>
+    </div>
+    
+    <div class="grid grid-auto">
+        <div class="card" style="border-left: 3px solid #7b3fe4;">
+            <div class="flex items-center gap-md">
+                <div style="font-size:2rem;">🟣</div>
+                <div>
+                    <h4 style="margin:0;">Polygon</h4>
+                    <p class="text-muted" style="margin:0;font-size:var(--font-size-sm);">POL • Chain ID: 137</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" style="border-left: 3px solid #627eea;">
+            <div class="flex items-center gap-md">
+                <div style="font-size:2rem;">🔷</div>
+                <div>
+                    <h4 style="margin:0;">Ethereum</h4>
+                    <p class="text-muted" style="margin:0;font-size:var(--font-size-sm);">ETH • Chain ID: 1</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" style="border-left: 3px solid #0052ff;">
+            <div class="flex items-center gap-md">
+                <div style="font-size:2rem;">🔵</div>
+                <div>
+                    <h4 style="margin:0;">Base</h4>
+                    <p class="text-muted" style="margin:0;font-size:var(--font-size-sm);">BASE • Chain ID: 8453</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" style="border-left: 3px solid #f0b90b;">
+            <div class="flex items-center gap-md">
+                <div style="font-size:2rem;">🟡</div>
+                <div>
+                    <h4 style="margin:0;">BNB Chain</h4>
+                    <p class="text-muted" style="margin:0;font-size:var(--font-size-sm);">BSC • Chain ID: 56</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
 
-    <script src="/static/js/dashboard.js"></script>
-</body>
-</html>
+{% block extra_js %}
+<script>
+    // Load dashboard stats
+    async function loadStats() {
+        try {
+            const response = await fetch('/api/stats/dashboard');
+            const stats = await response.json();
+            
+            document.getElementById('stat-tokens').textContent = stats.tokens || 0;
+            document.getElementById('stat-transfers').textContent = formatNumber(stats.transfers || 0);
+            document.getElementById('stat-wallets').textContent = formatNumber(stats.wallets || 0);
+            document.getElementById('stat-chains').textContent = stats.chains?.length || 3;
+        } catch (error) {
+            console.error('Failed to load stats:', error);
+        }
+    }
+    
+    // Check API health
+    async function checkHealth() {
+        try {
+            const response = await fetch('/api/health');
+            const data = await response.json();
+            
+            if (data.status === 'healthy') {
+                showNotification('All systems operational', 'success');
+            }
+        } catch (error) {
+            showNotification('Health check failed', 'error');
+        }
+    }
+    
+    // Format large numbers
+    function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toLocaleString();
+    }
+    
+    // Load stats on page load
+    document.addEventListener('DOMContentLoaded', loadStats);
+</script>
+{% endblock %}
