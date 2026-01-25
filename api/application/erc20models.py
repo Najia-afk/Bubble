@@ -1,7 +1,7 @@
 #erc20models.py
 import logging
 import os
-from sqlalchemy import Column, Date, Float, String, TIMESTAMP, Integer, ForeignKey, BigInteger, UniqueConstraint, Index, inspect, Boolean, Text
+from sqlalchemy import Column, Date, Float, String, TIMESTAMP, Integer, ForeignKey, BigInteger, UniqueConstraint, Index, inspect, Boolean, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.exc import ProgrammingError, IntegrityError

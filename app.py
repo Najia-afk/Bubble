@@ -102,6 +102,35 @@ def create_app():
     def visualize():
         """Visualization page"""
         return render_template('visualizations/transaction_flow.html')
+    
+    # ========================================================================
+    # INVESTIGATION & ML PAGES
+    # ========================================================================
+    
+    @app.route('/investigations')
+    def investigations_page():
+        """Investigations list page"""
+        return render_template('investigations.html')
+    
+    @app.route('/investigations/<int:investigation_id>')
+    def investigation_detail_page(investigation_id):
+        """Investigation detail page"""
+        return render_template('investigation_detail.html', investigation_id=investigation_id)
+    
+    @app.route('/classify')
+    def classify_page():
+        """Wallet classification page with SHAP explainability"""
+        return render_template('classify.html')
+    
+    @app.route('/models')
+    def models_page():
+        """ML models management page"""
+        return render_template('models.html')
+    
+    @app.route('/audit')
+    def audit_page():
+        """Audit trail page for compliance"""
+        return render_template('audit.html')
 
     @app.errorhandler(Exception)
     def handle_exception(e):
