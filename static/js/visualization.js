@@ -1,8 +1,13 @@
 // Visualization JavaScript for Transaction Flow Graph
+// Generalized for any token on any EVM chain - no hardcoded token references
 
 let network = null;
 let nodes = new vis.DataSet([]);
 let edges = new vis.DataSet([]);
+let currentToken = 'USDT';
+
+// Supported chains from backend config
+const SUPPORTED_CHAINS = ['ETH', 'POL', 'BSC', 'BASE', 'ARB', 'OP', 'AVAX', 'FTM'];
 
 // Initialize the network graph
 function initGraph() {
@@ -78,94 +83,85 @@ function initGraph() {
     });
 }
 
-// Load graph data from TigerGraph
+// Load graph data from backend API
 async function loadGraph() {
     const chain = document.getElementById('chain-select').value;
-    const hours = document.getElementById('time-select').value;
-    const minValue = document.getElementById('min-value').value || 0;
+    const symbol = document.getElementById('token-select')?.value || 'USDT';
+    const hours = document.getElementById('time-select')?.value || 24;
+    const minValue = parseFloat(document.getElementById('min-value')?.value || 0);
     
-    showNotification('Loading transaction graph...', 'info');
+    currentToken = symbol.toUpperCase();
+    showNotification(`Loading ${currentToken} transfers on ${chain}...`, 'info');
     
     try {
-        // TODO: Implement actual TigerGraph query
-        // For now, generate mock data
-        const mockData = generateMockGraphData(chain, parseInt(hours));
+        // Fetch real data from backend API
+        const response = await fetch(`/api/graph/transfers?chain=${chain}&symbol=${symbol}&limit=500`);
+        
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
         
         // Clear existing data
         nodes.clear();
         edges.clear();
         
-        // Add new data
-        nodes.add(mockData.nodes);
-        edges.add(mockData.edges);
-        
-        // Update stats
-        updateGraphStats(mockData);
-        
-        showNotification('Graph loaded successfully', 'success');
+        if (data.nodes && data.nodes.length > 0) {
+            // Filter by minimum value if specified
+            let filteredEdges = data.edges;
+            if (minValue > 0) {
+                filteredEdges = data.edges.filter(e => e.value >= minValue);
+                // Also filter nodes to only include those with connections
+                const connectedNodeIds = new Set();
+                filteredEdges.forEach(e => {
+                    connectedNodeIds.add(e.from);
+                    connectedNodeIds.add(e.to);
+                });
+                data.nodes = data.nodes.filter(n => connectedNodeIds.has(n.id));
+            }
+            
+            // Add data to graph
+            nodes.add(data.nodes);
+            edges.add(filteredEdges);
+            
+            // Update stats
+            updateGraphStats({
+                nodes: data.nodes,
+                edges: filteredEdges,
+                clusters: data.stats?.clusters || estimateClusters(data.nodes.length),
+                totalVolume: data.stats?.total_volume || filteredEdges.reduce((sum, e) => sum + e.value, 0)
+            });
+            
+            showNotification(`Loaded ${data.nodes.length} wallets, ${filteredEdges.length} transfers`, 'success');
+        } else {
+            showNotification(`No transfer data found for ${currentToken} on ${chain}`, 'warning');
+            updateGraphStats({ nodes: [], edges: [], clusters: 0, totalVolume: 0 });
+        }
         
     } catch (error) {
         console.error('Error loading graph:', error);
-        showNotification('Failed to load graph', 'error');
+        showNotification(`Failed to load graph: ${error.message}`, 'error');
     }
 }
 
-// Generate mock data for demonstration
-function generateMockGraphData(chain, hours) {
-    const nodeCount = Math.floor(Math.random() * 30) + 20;
-    const mockNodes = [];
-    const mockEdges = [];
-    
-    // Generate nodes (wallets)
-    for (let i = 0; i < nodeCount; i++) {
-        const isHighVolume = Math.random() > 0.8;
-        const isContract = Math.random() > 0.9;
-        
-        mockNodes.push({
-            id: i,
-            label: `0x${Math.random().toString(16).substring(2, 8)}...`,
-            color: isContract ? '#51cf66' : isHighVolume ? '#ff6b6b' : '#00d4ff',
-            size: isHighVolume ? 30 : isContract ? 35 : 20,
-            title: `Wallet ${i}<br>Transactions: ${Math.floor(Math.random() * 100)}`
-        });
-    }
-    
-    // Generate edges (transfers)
-    const edgeCount = Math.floor(nodeCount * 1.5);
-    for (let i = 0; i < edgeCount; i++) {
-        const from = Math.floor(Math.random() * nodeCount);
-        let to = Math.floor(Math.random() * nodeCount);
-        
-        // Avoid self-loops
-        while (to === from) {
-            to = Math.floor(Math.random() * nodeCount);
-        }
-        
-        const amount = (Math.random() * 10000).toFixed(2);
-        
-        mockEdges.push({
-            id: i,
-            from: from,
-            to: to,
-            value: parseFloat(amount),
-            title: `${amount} GHST`,
-            width: Math.min(Math.max(amount / 1000, 1), 5)
-        });
-    }
-    
-    return {
-        nodes: mockNodes,
-        edges: mockEdges,
-        clusters: Math.floor(Math.random() * 5) + 2,
-        totalVolume: mockEdges.reduce((sum, e) => sum + e.value, 0)
-    };
+// Estimate cluster count based on network size
+function estimateClusters(nodeCount) {
+    if (nodeCount < 10) return 1;
+    if (nodeCount < 30) return Math.ceil(nodeCount / 10);
+    return Math.ceil(Math.sqrt(nodeCount));
 }
 
 function updateGraphStats(data) {
-    document.getElementById('node-count').textContent = data.nodes.length;
-    document.getElementById('edge-count').textContent = data.edges.length;
-    document.getElementById('cluster-count').textContent = data.clusters;
-    document.getElementById('graph-volume').textContent = data.totalVolume.toFixed(2) + ' GHST';
+    const nodeCountEl = document.getElementById('node-count');
+    const edgeCountEl = document.getElementById('edge-count');
+    const clusterCountEl = document.getElementById('cluster-count');
+    const volumeEl = document.getElementById('graph-volume');
+    
+    if (nodeCountEl) nodeCountEl.textContent = data.nodes?.length || 0;
+    if (edgeCountEl) edgeCountEl.textContent = data.edges?.length || 0;
+    if (clusterCountEl) clusterCountEl.textContent = data.clusters || 0;
+    if (volumeEl) volumeEl.textContent = (data.totalVolume || 0).toFixed(2) + ` ${currentToken}`;
 }
 
 function showNodeDetails(nodeId) {
@@ -173,56 +169,109 @@ function showNodeDetails(nodeId) {
     const detailsDiv = document.getElementById('node-details');
     const infoDiv = document.getElementById('node-info');
     
+    if (!node || !detailsDiv || !infoDiv) return;
+    
     // Get connected edges
     const connectedEdges = network.getConnectedEdges(nodeId);
     const incomingTxs = connectedEdges.filter(edgeId => {
         const edge = edges.get(edgeId);
-        return edge.to === nodeId;
+        return edge && edge.to === nodeId;
     });
     const outgoingTxs = connectedEdges.filter(edgeId => {
         const edge = edges.get(edgeId);
-        return edge.from === nodeId;
+        return edge && edge.from === nodeId;
+    });
+    
+    // Calculate volumes
+    let inVolume = 0, outVolume = 0;
+    incomingTxs.forEach(edgeId => {
+        const edge = edges.get(edgeId);
+        if (edge) inVolume += edge.value || 0;
+    });
+    outgoingTxs.forEach(edgeId => {
+        const edge = edges.get(edgeId);
+        if (edge) outVolume += edge.value || 0;
     });
     
     infoDiv.innerHTML = `
-        <p><strong>Address:</strong> ${node.label}</p>
-        <p><strong>Incoming Transactions:</strong> ${incomingTxs.length}</p>
-        <p><strong>Outgoing Transactions:</strong> ${outgoingTxs.length}</p>
-        <p><strong>Total Connections:</strong> ${connectedEdges.length}</p>
+        <p><strong>Address:</strong> ${node.id || node.label}</p>
+        <p><strong>Incoming:</strong> ${incomingTxs.length} txs (${inVolume.toFixed(2)} ${currentToken})</p>
+        <p><strong>Outgoing:</strong> ${outgoingTxs.length} txs (${outVolume.toFixed(2)} ${currentToken})</p>
+        <p><strong>Net Flow:</strong> ${(inVolume - outVolume).toFixed(2)} ${currentToken}</p>
+        <button onclick="investigateAddress('${node.id}')" class="btn btn-sm btn-primary mt-2">
+            Investigate Address
+        </button>
     `;
     
     detailsDiv.style.display = 'block';
+}
+
+// Open investigation for a specific address
+async function investigateAddress(address) {
+    try {
+        const chain = document.getElementById('chain-select').value;
+        window.location.href = `/investigations?address=${address}&chain=${chain}`;
+    } catch (error) {
+        showNotification('Failed to open investigation', 'error');
+    }
 }
 
 async function detectClusters() {
     showNotification('Detecting transaction clusters...', 'info');
     
     try {
-        // TODO: Implement actual TigerGraph cluster detection query
-        setTimeout(() => {
-            showNotification('Cluster detection completed', 'success');
+        // Use backend API for cluster detection if available
+        const chain = document.getElementById('chain-select').value;
+        const response = await fetch(`/api/graph/clusters?chain=${chain}`);
+        
+        if (response.ok) {
+            const clusterData = await response.json();
+            applyClusterColors(clusterData.clusters);
+            showNotification(`Detected ${clusterData.clusters.length} clusters`, 'success');
+        } else {
+            // Fallback: simple client-side clustering by connectivity
+            const clusterColors = ['#00d4ff', '#7b68ee', '#51cf66', '#ffd43b', '#ff6b6b', '#ff922b', '#cc5de8', '#20c997'];
+            const nodeList = nodes.get();
             
-            // Highlight clusters with different colors
-            const clusterColors = ['#00d4ff', '#7b68ee', '#51cf66', '#ffd43b', '#ff6b6b'];
-            nodes.forEach(node => {
-                const clusterId = Math.floor(Math.random() * clusterColors.length);
+            // Simple heuristic: assign colors based on connection patterns
+            nodeList.forEach((node, idx) => {
+                const connections = network.getConnectedEdges(node.id).length;
+                const clusterId = Math.min(Math.floor(connections / 3), clusterColors.length - 1);
                 nodes.update({
                     id: node.id,
                     color: clusterColors[clusterId]
                 });
             });
-        }, 1000);
+            
+            showNotification('Cluster detection completed (client-side)', 'success');
+        }
         
     } catch (error) {
         console.error('Error detecting clusters:', error);
-        showNotification('Failed to detect clusters', 'error');
+        showNotification('Cluster detection failed', 'error');
     }
+}
+
+function applyClusterColors(clusters) {
+    const clusterColors = ['#00d4ff', '#7b68ee', '#51cf66', '#ffd43b', '#ff6b6b', '#ff922b', '#cc5de8', '#20c997'];
+    
+    clusters.forEach((cluster, idx) => {
+        const color = clusterColors[idx % clusterColors.length];
+        cluster.nodes.forEach(nodeId => {
+            nodes.update({
+                id: nodeId,
+                color: color
+            });
+        });
+    });
 }
 
 function exportGraph() {
     const data = {
         nodes: nodes.get(),
         edges: edges.get(),
+        token: currentToken,
+        chain: document.getElementById('chain-select')?.value || 'unknown',
         timestamp: new Date().toISOString()
     };
     
@@ -230,7 +279,7 @@ function exportGraph() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ghst-graph-${Date.now()}.json`;
+    a.download = `${currentToken}-graph-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     
@@ -244,8 +293,8 @@ function showNotification(message, type = 'info') {
         top: 20px;
         right: 20px;
         padding: 1rem 1.5rem;
-        background: ${type === 'success' ? '#51cf66' : type === 'error' ? '#ff6b6b' : '#00d4ff'};
-        color: #0a0a0a;
+        background: ${type === 'success' ? '#51cf66' : type === 'error' ? '#ff6b6b' : type === 'warning' ? '#ffd43b' : '#00d4ff'};
+        color: ${type === 'warning' ? '#1a1a2e' : '#0a0a0a'};
         border-radius: 8px;
         font-weight: 600;
         z-index: 9999;

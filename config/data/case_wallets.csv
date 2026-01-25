@@ -1,0 +1,18 @@
+case_id,address,chain_code,label,role,first_seen,status,balance_usd,notes
+CASE-2026-001,0xAc2e5153170278e24667a580baEa056ad8Bf9bFB,ETH,Suspicious Drainer,attacker,2026-01-25,active,,Main suspicious address identified
+CASE-2026-002,0x3b09A3c9aDD7D0262e6E9724D7e823Cd767a0c74,ETH,Trust Wallet Theft 1,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-002,0x463452C356322D463B84891eBDa33DAED274cB40,ETH,Trust Wallet Theft 2,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-002,0xa42297ff42a3b65091967945131cd1db962afae4,ETH,Trust Wallet Theft 3,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-002,0xe072358070506a4DDA5521B19260011A490a5aaA,ETH,Trust Wallet Theft 4,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-002,0xc22b8126ca21616424a22bf012fd1b7cf48f02b1,ETH,Trust Wallet Theft 5,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-002,0x109252d00b2fa8c79a74caa96d9194eef6c99581,ETH,Trust Wallet Theft 6,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-002,0x30cfa51ffb82727515708ce7dd8c69d121648445,ETH,Trust Wallet Theft 7,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-002,0x4735fbecf1db342282ad5baef585ee301b1bce25,ETH,Trust Wallet Theft 8,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-002,0xf2dd8eb79625109e2dd87c4243708e1485a85655,ETH,Trust Wallet Theft 9,attacker,2026-01-25,active,,Verified theft address
+CASE-2026-003,0x4f8affe6cd269d1f8352d0542432de6975c3912d,ETH,PK Compromise Attacker,attacker,2026-01-24,active,,Swapped to ETH and deposited 330 ETH to Tornado
+CASE-2026-004,0xb37d617716e46511E56FE07b885fBdD70119f768,ETH,Danny/Meech Seized Wallet,seized,2026-01-25,seized,18580000,$18.58M seized by law enforcement
+CASE-2026-005,0x2e8a8670b734e260cedbc6d5a05532264aae5c38,BSC,GANA Theft Consolidation,attacker,2026-01-25,active,,BSC theft consolidation address
+CASE-2026-005,0x7a503e3ab9433ebf13afb4f7f1793c25733b3cca,ETH,GANA Dormant ETH,attacker,2026-01-25,dormant,1046000,346 ETH sitting dormant
+CASE-2026-006,0x8c12C21C394D9174c3b1a086A97d2C5523ABb8F5,ETH,Fake Hyperliquid App,attacker,2026-01-25,active,,Google Play Store scam drain wallet
+CASE-2026-007,0x98BCc6c34A489CEfdD9DfA8d792CFEFb02Ea2D12,ETH,Garden Finance Exploiter,attacker,2026-01-25,active,,All freezeable assets quickly swapped
+CASE-2026-008,0x72785D42874E965086829eA789a703fe1a5238df,ETH,Hypurr NFT Drainer,attacker,2026-01-25,active,400000,Drained 8 Hypurr NFTs on HyperEVM

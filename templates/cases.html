@@ -1,0 +1,891 @@
+{% extends "base.html" %}
+
+{% block title %}Investigation Cases{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+    }
+    
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .page-subtitle {
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+    }
+    
+    .stat-card h4 {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stat-card .value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .case-section {
+        margin-bottom: 2rem;
+    }
+
+    .case-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .case-section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .case-section-count {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--bg-secondary);
+    }
+
+    .case-table {
+        display: grid;
+        grid-template-columns: 2fr 0.7fr 0.8fr 1fr 0.9fr 0.6fr 0.6fr 0.5fr 0.5fr 0.5fr 1fr 0.9fr;
+        gap: 0;
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        font-size: 0.75rem;
+    }
+
+    .case-table-header {
+        background: var(--bg-secondary);
+        padding: 0.6rem 0.5rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        font-size: 0.65rem;
+        letter-spacing: 0.02em;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .case-table-cell {
+        padding: 0.6rem 0.5rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .case-table-cell[data-col="case"] {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.2rem;
+    }
+
+    .case-title {
+        font-weight: 600;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    .case-id {
+        font-size: 0.65rem;
+        color: var(--text-muted);
+        font-family: monospace;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        padding: 0.2rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .status-badge.active { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+    .status-badge.investigating { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+    .status-badge.closed { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+    .status-badge.monitoring { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+    .status-badge.pending { background: rgba(107, 114, 128, 0.15); color: #6b7280; }
+    .status-badge.new { background: rgba(14, 165, 233, 0.15); color: #0ea5e9; }
+    .status-badge.imported { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+
+    .chain-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.2rem;
+    }
+
+    .chain-tag {
+        padding: 0.15rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.6rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .chain-tag.ETH { background: rgba(98, 126, 234, 0.2); color: #627eea; }
+    .chain-tag.POL { background: rgba(130, 71, 229, 0.2); color: #8247e5; }
+    .chain-tag.BSC { background: rgba(243, 186, 47, 0.2); color: #f3ba2f; }
+    .chain-tag.ARB { background: rgba(40, 160, 240, 0.2); color: #28a0f0; }
+    .chain-tag.OP { background: rgba(255, 4, 32, 0.2); color: #ff0420; }
+    .chain-tag.BASE { background: rgba(0, 82, 255, 0.2); color: #0052ff; }
+    .chain-tag.AVAX { background: rgba(232, 65, 66, 0.2); color: #e84142; }
+    .chain-tag.FTM { background: rgba(19, 181, 236, 0.2); color: #13b5ec; }
+    .chain-tag.SOL { background: rgba(153, 69, 255, 0.2); color: #9945ff; }
+
+    .wallet-count {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        font-size: 0.7rem;
+    }
+
+    .wallet-count .icon {
+        font-size: 0.65rem;
+    }
+
+    .wallet-count.victims { color: #22c55e; }
+    .wallet-count.suspects { color: #ef4444; }
+    .wallet-count.exchanges { color: #3b82f6; }
+    .wallet-count.bridges { color: #a855f7; }
+    .wallet-count.mixers { color: #f59e0b; }
+
+    .action-btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        padding: 0.3rem 0.5rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.65rem;
+        color: var(--text-secondary);
+        transition: all 0.15s;
+    }
+
+    .action-btn:hover {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+
+    .action-btn.import-btn {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .action-btn.import-btn:hover {
+        background: var(--primary);
+        color: white;
+    }
+
+    .action-btn.view-btn {
+        border-color: var(--success);
+        color: var(--success);
+    }
+
+    .action-btn.view-btn:hover {
+        background: var(--success);
+        color: white;
+    }
+
+    .loss-value {
+        font-weight: 600;
+        color: var(--danger);
+    }
+
+    .loss-value.estimated {
+        color: var(--warning);
+        font-style: italic;
+    }
+
+    .inv-badge {
+        display: inline-flex;
+        padding: 0.15rem 0.4rem;
+        border-radius: 4px;
+        font-size: 0.6rem;
+        font-weight: 500;
+    }
+
+    .inv-badge.pending { background: rgba(107, 114, 128, 0.15); color: #6b7280; }
+    .inv-badge.in_progress { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+    .inv-badge.completed { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+    .inv-badge.archived { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
+
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 0.6rem 1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+        background: var(--card-bg);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        padding: 0.6rem 1rem;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+        background: var(--bg-secondary);
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(4px);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-overlay.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: #1a1a2e;
+        border: 1px solid #3f3f46;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+    }
+
+    .modal-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #3f3f46;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #ffffff;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #a1a1aa;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+        transition: color 0.2s;
+    }
+
+    .modal-close:hover {
+        color: #ffffff;
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #ffffff;
+        margin-bottom: 0.4rem;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 0.6rem 0.8rem;
+        border: 1px solid #3f3f46;
+        border-radius: 6px;
+        background: #0f0f1a;
+        color: #ffffff;
+        font-size: 0.9rem;
+    }
+
+    .form-group input::placeholder,
+    .form-group textarea::placeholder {
+        color: #71717a;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+        outline: none;
+        border-color: #00d4ff;
+        box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
+    }
+
+    .form-group textarea {
+        min-height: 80px;
+        resize: vertical;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .modal-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid #3f3f46;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+
+    .loading-spinner {
+        text-align: center;
+        padding: 3rem;
+        color: var(--text-secondary);
+    }
+
+    @media (max-width: 1200px) {
+        .case-table {
+            grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.6fr 0.6fr 1fr 0.8fr;
+        }
+
+        .case-table-header[data-col="victims"],
+        .case-table-cell[data-col="victims"],
+        .case-table-header[data-col="suspects"],
+        .case-table-cell[data-col="suspects"],
+        .case-table-header[data-col="inv_wallets"],
+        .case-table-cell[data-col="inv_wallets"],
+        .case-table-header[data-col="inv_tokens"],
+        .case-table-cell[data-col="inv_tokens"],
+        .case-table-header[data-col="addresses"],
+        .case-table-cell[data-col="addresses"] {
+            display: none;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .case-table {
+            grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr;
+        }
+
+        .case-table-header[data-col="chains"],
+        .case-table-cell[data-col="chains"],
+        .case-table-header[data-col="inv_status"],
+        .case-table-cell[data-col="inv_status"],
+        .case-table-header[data-col="reported"],
+        .case-table-cell[data-col="reported"] {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Investigation Cases</h1>
+        <p class="page-subtitle">Track and manage security investigations</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn-secondary" onclick="refreshCases()">↻ Refresh</button>
+        <button class="btn-primary" onclick="openCreateCaseModal()">+ New Case</button>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <h4>Total Cases</h4>
+        <div class="value" id="totalCases">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>Active</h4>
+        <div class="value" id="activeCases">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>Investigating</h4>
+        <div class="value" id="investigatingCases">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>Est. Total Loss</h4>
+        <div class="value" id="totalLoss">-</div>
+    </div>
+</div>
+
+<div id="casesContainer">
+    <div class="loading-spinner">Loading cases...</div>
+</div>
+
+<!-- Create Case Modal -->
+<div class="modal-overlay" id="createCaseModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title">Create New Case</h2>
+            <button class="modal-close" onclick="closeCreateCaseModal()">&times;</button>
+        </div>
+        <form id="createCaseForm" onsubmit="createCase(event)">
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="case_id">Case ID *</label>
+                        <input type="text" id="case_id" name="case_id" required placeholder="e.g. CASE-2024-001">
+                    </div>
+                    <div class="form-group">
+                        <label for="status">Status</label>
+                        <select id="status" name="status">
+                            <option value="active">Active</option>
+                            <option value="investigating">Investigating</option>
+                            <option value="monitoring">Monitoring</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="title">Title *</label>
+                    <input type="text" id="title" name="title" required placeholder="e.g. DeFi Protocol Exploit">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="source">Source</label>
+                        <select id="source" name="source">
+                            <option value="osint">OSINT</option>
+                            <option value="community">Community Report</option>
+                            <option value="internal">Internal</option>
+                            <option value="partner">Partner</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="severity">Severity</label>
+                        <select id="severity" name="severity">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="date_reported">Date Reported</label>
+                        <input type="date" id="date_reported" name="date_reported">
+                    </div>
+                    <div class="form-group">
+                        <label for="date_incident">Date of Incident</label>
+                        <input type="date" id="date_incident" name="date_incident">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="total_stolen_usd">Estimated Loss (USD)</label>
+                        <input type="number" id="total_stolen_usd" name="total_stolen_usd" step="0.01" placeholder="e.g. 1000000">
+                    </div>
+                    <div class="form-group">
+                        <label for="attack_vector">Attack Vector</label>
+                        <input type="text" id="attack_vector" name="attack_vector" placeholder="e.g. Flash Loan, Reentrancy">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="victim_count">Victim Count</label>
+                    <input type="number" id="victim_count" name="victim_count" placeholder="Number of victims">
+                </div>
+
+                <div class="form-group">
+                    <label for="summary">Summary</label>
+                    <textarea id="summary" name="summary" placeholder="Brief description of the incident..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="wallets">Wallets (one per line: address,chain,role,label)</label>
+                    <textarea id="wallets" name="wallets" placeholder="0x123...,ETH,attacker,Main Exploit Wallet&#10;0x456...,ETH,victim,Protocol Treasury"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeCreateCaseModal()">Cancel</button>
+                <button type="submit" class="btn-primary">Create Case</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Notification Toast -->
+<div id="notification" style="position:fixed;bottom:20px;right:20px;padding:1rem 1.5rem;border-radius:8px;display:none;z-index:2000;font-weight:500;"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let casesData = [];
+
+    async function loadCases() {
+        try {
+            const response = await fetch('/api/cases');
+            const data = await response.json();
+            casesData = data.cases || [];
+            
+            updateStats(casesData);
+            renderCases(casesData);
+        } catch (error) {
+            document.getElementById('casesContainer').innerHTML = `
+                <div class="loading-spinner" style="color: var(--danger);">
+                    Error loading cases: ${error.message}
+                </div>
+            `;
+        }
+    }
+
+    function updateStats(cases) {
+        const total = cases.length;
+        const active = cases.filter(c => c.status === 'active').length;
+        const investigating = cases.filter(c => c.status === 'investigating').length;
+        const totalLoss = cases.reduce((sum, c) => sum + (c.estimated_loss_usd || c.total_stolen_usd || 0), 0);
+
+        document.getElementById('totalCases').textContent = total;
+        document.getElementById('activeCases').textContent = active;
+        document.getElementById('investigatingCases').textContent = investigating;
+        document.getElementById('totalLoss').textContent = '$' + formatNumber(totalLoss);
+    }
+
+    function formatNumber(num) {
+        if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
+        if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+        if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+        return num.toLocaleString();
+    }
+
+    function formatDate(dateStr) {
+        if (!dateStr) return '-';
+        return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+    }
+
+    function showNotification(message, type = 'info') {
+        const notification = document.getElementById('notification');
+        notification.textContent = message;
+        notification.style.display = 'block';
+        notification.style.background = type === 'success' ? 'var(--success)' : 
+                                         type === 'error' ? 'var(--danger)' : 'var(--primary)';
+        notification.style.color = 'white';
+        setTimeout(() => { notification.style.display = 'none'; }, 4000);
+    }
+
+    function renderRow(c) {
+        const loss = c.estimated_loss_usd || c.total_stolen_usd;
+        const lossClass = c.estimated_loss_usd ? 'estimated' : '';
+        const chains = (c.chains_involved || []).slice(0, 4);
+        
+        // Chain badges with colors
+        const chainBadges = chains.map(ch => `<span class="chain-tag ${ch}">${ch}</span>`).join('');
+        const extraChains = c.chains_involved && c.chains_involved.length > 4 
+            ? `<span class="chain-tag">+${c.chains_involved.length - 4}</span>` : '';
+        
+        return `
+            <div class="case-table-cell" data-col="case">
+                <span class="case-title">${c.title}</span>
+                <span class="case-id">${c.case_id}</span>
+            </div>
+            <div class="case-table-cell" data-col="status">
+                <span class="status-badge ${c.status}">${c.status}</span>
+            </div>
+            <div class="case-table-cell" data-col="reported">${formatDate(c.date_reported)}</div>
+            <div class="case-table-cell" data-col="attack">${c.attack_vector || '-'}</div>
+            <div class="case-table-cell" data-col="chains">
+                <div class="chain-tags">${chainBadges}${extraChains}</div>
+            </div>
+            <div class="case-table-cell" data-col="victims">
+                <span class="wallet-count victims" title="Victim wallets">
+                    <span class="icon">👤</span> ${c.victim_wallet_count || 0}
+                </span>
+            </div>
+            <div class="case-table-cell" data-col="suspects">
+                <span class="wallet-count suspects" title="Suspect wallets">
+                    <span class="icon">🎭</span> ${c.attacker_wallet_count || 0}
+                </span>
+            </div>
+            <div class="case-table-cell" data-col="exchanges">
+                <span class="wallet-count exchanges" title="Exchange wallets">
+                    <span class="icon">🏦</span> ${c.exchange_wallet_count || 0}
+                </span>
+            </div>
+            <div class="case-table-cell" data-col="bridges">
+                <span class="wallet-count bridges" title="Bridge wallets">
+                    <span class="icon">🌉</span> ${c.bridge_wallet_count || 0}
+                </span>
+            </div>
+            <div class="case-table-cell" data-col="mixers">
+                <span class="wallet-count mixers" title="Mixer wallets (Tornado etc)">
+                    <span class="icon">🌀</span> ${c.mixer_wallet_count || 0}
+                </span>
+            </div>
+            <div class="case-table-cell" data-col="loss">
+                <span class="loss-value ${lossClass}">${loss ? '$' + formatNumber(loss) : '-'}</span>
+            </div>
+            <div class="case-table-cell" data-col="actions">
+                ${c.investigation_id 
+                    ? `<button class="action-btn" onclick="refreshCase('${c.case_id}')" title="Refresh data">↻</button>
+                       <a href="/graph?investigation_id=${c.investigation_id}" class="action-btn view-btn">Graph</a>`
+                    : `<button class="action-btn import-btn" onclick="importCase('${c.case_id}')">Import</button>`
+                }
+            </div>
+        `;
+    }
+
+    function renderCases(cases) {
+        const sections = [
+            { key: 'active', label: '🔥 Active' },
+            { key: 'investigating', label: '🔍 Investigating' },
+            { key: 'monitoring', label: '👁 Monitoring' },
+            { key: 'closed', label: '✓ Closed' },
+            { key: 'other', label: '📋 Other' }
+        ];
+
+        const groups = {};
+        sections.forEach(s => groups[s.key] = []);
+
+        cases.forEach(c => {
+            const status = c.status || 'other';
+            if (groups[status]) {
+                groups[status].push(c);
+            } else {
+                groups['other'].push(c);
+            }
+        });
+
+        document.getElementById('casesContainer').innerHTML = sections.map(section => {
+            const items = groups[section.key] || [];
+            if (items.length === 0) return '';
+            return `
+                <div class="case-section">
+                    <div class="case-section-header">
+                        <div class="case-section-title">
+                            ${section.label}
+                            <span class="case-section-count">${items.length}</span>
+                        </div>
+                    </div>
+                    <div class="case-table">
+                        <div class="case-table-header" data-col="case">Case</div>
+                        <div class="case-table-header" data-col="status">Status</div>
+                        <div class="case-table-header" data-col="reported">Reported</div>
+                        <div class="case-table-header" data-col="attack">Attack Vector</div>
+                        <div class="case-table-header" data-col="chains">Chains</div>
+                        <div class="case-table-header" data-col="victims">Victims</div>
+                        <div class="case-table-header" data-col="suspects">Suspects</div>
+                        <div class="case-table-header" data-col="exchanges">CEX</div>
+                        <div class="case-table-header" data-col="bridges">Bridge</div>
+                        <div class="case-table-header" data-col="mixers">Mixer</div>
+                        <div class="case-table-header" data-col="loss">Est. Loss</div>
+                        <div class="case-table-header" data-col="actions">Actions</div>
+                        ${items.map(renderRow).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    async function importCase(caseId) {
+        if (!confirm(`Import case ${caseId} to database as an investigation?`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/cases/${caseId}/import`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                showNotification(`Case imported! Investigation ID: ${data.investigation_id}`, 'success');
+                setTimeout(() => {
+                    window.location.href = `/graph?investigation_id=${data.investigation_id}`;
+                }, 1500);
+            } else {
+                showNotification(`Import failed: ${data.error}`, 'error');
+            }
+        } catch (error) {
+            showNotification(`Import error: ${error.message}`, 'error');
+        }
+    }
+
+    async function refreshCase(caseId) {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '⏳';
+        btn.disabled = true;
+        
+        try {
+            // Re-fetch just this case data
+            const response = await fetch(`/api/cases?case_id=${caseId}`);
+            const data = await response.json();
+            
+            if (response.ok && data.cases && data.cases.length > 0) {
+                // Update just this row in the DOM
+                const caseData = data.cases[0];
+                
+                // Find and update the row containing this case
+                const allCells = document.querySelectorAll('.case-table-cell');
+                for (let cell of allCells) {
+                    if (cell.querySelector('.case-id')?.textContent === caseId) {
+                        // Found the case row - update entire parent section
+                        loadCases();  // Simple reload for now
+                        showNotification(`Refreshed ${caseId}`, 'success');
+                        return;
+                    }
+                }
+            } else {
+                showNotification(`Failed to refresh: ${data.error || 'Case not found'}`, 'error');
+            }
+        } catch (error) {
+            showNotification(`Refresh error: ${error.message}`, 'error');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    }
+    
+    function refreshCases() {
+        loadCases();
+        showNotification('Refreshing cases...', 'info');
+    }
+
+    function openCreateCaseModal() {
+        document.getElementById('createCaseModal').classList.add('active');
+    }
+
+    function closeCreateCaseModal() {
+        document.getElementById('createCaseModal').classList.remove('active');
+        document.getElementById('createCaseForm').reset();
+    }
+
+    async function createCase(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+
+        const walletsRaw = formData.get('wallets') || '';
+        const walletLines = walletsRaw.split('\n').filter(line => line.trim());
+        const wallets = walletLines.map(line => {
+            const parts = line.split(',').map(p => p.trim());
+            return {
+                address: parts[0] || '',
+                chain_code: parts[1] || 'ETH',
+                role: parts[2] || 'related',
+                label: parts[3] || ''
+            };
+        }).filter(w => w.address);
+
+        const payload = {
+            case_id: formData.get('case_id'),
+            title: formData.get('title'),
+            source: formData.get('source'),
+            status: formData.get('status'),
+            severity: formData.get('severity'),
+            date_reported: formData.get('date_reported') || null,
+            date_incident: formData.get('date_incident') || null,
+            total_stolen_usd: parseFloat(formData.get('total_stolen_usd')) || null,
+            attack_vector: formData.get('attack_vector') || null,
+            victim_count: parseInt(formData.get('victim_count')) || null,
+            summary: formData.get('summary') || null,
+            wallets
+        };
+
+        try {
+            const response = await fetch('/api/cases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showNotification('Case created: ' + data.case_id, 'success');
+                closeCreateCaseModal();
+                loadCases();
+            } else {
+                showNotification('Error: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showNotification('Error: ' + error.message, 'error');
+        }
+    }
+    
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', loadCases);
+</script>
+{% endblock %}

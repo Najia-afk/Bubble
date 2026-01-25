@@ -5,28 +5,64 @@
 {% block content %}
 <div class="page-header">
     <h1 class="page-title">Dashboard</h1>
-    <p class="page-subtitle">Blockchain analytics overview • Real-time ERC20 token data</p>
+    <p class="page-subtitle">Blockchain analytics overview • Investigation tracking</p>
 </div>
 
-<!-- Stats Cards -->
+<!-- Case Stats -->
 <section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Investigation Cases</h2>
+        <a href="/cases" class="btn btn-secondary btn-sm">View All</a>
+    </div>
     <div class="grid grid-4">
         <div class="card stat-card">
-            <div class="stat-icon">🪙</div>
-            <div class="stat-value" id="stat-tokens">-</div>
-            <div class="stat-label">Tracked Tokens</div>
+            <div class="stat-icon">📁</div>
+            <div class="stat-value" id="stat-total-cases">-</div>
+            <div class="stat-label">Total Cases</div>
         </div>
         
+        <div class="card stat-card" style="border-left: 3px solid #ef4444;">
+            <div class="stat-icon">🔥</div>
+            <div class="stat-value" id="stat-active-cases">-</div>
+            <div class="stat-label">Active</div>
+        </div>
+        
+        <div class="card stat-card" style="border-left: 3px solid #3b82f6;">
+            <div class="stat-icon">🔍</div>
+            <div class="stat-value" id="stat-investigating-cases">-</div>
+            <div class="stat-label">Investigating</div>
+        </div>
+        
+        <div class="card stat-card" style="border-left: 3px solid #10b981;">
+            <div class="stat-icon">💰</div>
+            <div class="stat-value" id="stat-loss">-</div>
+            <div class="stat-label">Est. Total Loss</div>
+        </div>
+    </div>
+</section>
+
+<!-- Investigation Data Stats -->
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Investigation Data</h2>
+    </div>
+    <div class="grid grid-4">
         <div class="card stat-card">
-            <div class="stat-icon">📊</div>
-            <div class="stat-value" id="stat-transfers">-</div>
-            <div class="stat-label">Total Transfers</div>
+            <div class="stat-icon">🗂️</div>
+            <div class="stat-value" id="stat-investigations">-</div>
+            <div class="stat-label">Investigations</div>
         </div>
         
         <div class="card stat-card">
             <div class="stat-icon">👛</div>
-            <div class="stat-value" id="stat-wallets">-</div>
-            <div class="stat-label">Unique Wallets</div>
+            <div class="stat-value" id="stat-inv-wallets">-</div>
+            <div class="stat-label">Tracked Wallets</div>
+        </div>
+        
+        <div class="card stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-value" id="stat-inv-transfers">-</div>
+            <div class="stat-label">Tracked Transfers</div>
         </div>
         
         <div class="card stat-card">
@@ -186,10 +222,17 @@
             const response = await fetch('/api/stats/dashboard');
             const stats = await response.json();
             
-            document.getElementById('stat-tokens').textContent = stats.tokens || 0;
-            document.getElementById('stat-transfers').textContent = formatNumber(stats.transfers || 0);
-            document.getElementById('stat-wallets').textContent = formatNumber(stats.wallets || 0);
-            document.getElementById('stat-chains').textContent = stats.chains?.length || 3;
+            // Case stats
+            document.getElementById('stat-total-cases').textContent = stats.total_cases || 0;
+            document.getElementById('stat-active-cases').textContent = stats.active_cases || 0;
+            document.getElementById('stat-investigating-cases').textContent = stats.investigating_cases || 0;
+            document.getElementById('stat-loss').textContent = '$' + formatNumber(stats.estimated_loss_usd || 0);
+            
+            // Investigation data stats
+            document.getElementById('stat-investigations').textContent = stats.total_investigations || 0;
+            document.getElementById('stat-inv-wallets').textContent = formatNumber(stats.investigation_wallets || 0);
+            document.getElementById('stat-inv-transfers').textContent = formatNumber(stats.investigation_transfers || 0);
+            document.getElementById('stat-chains').textContent = stats.chains?.length || 0;
         } catch (error) {
             console.error('Failed to load stats:', error);
         }

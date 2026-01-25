@@ -1,11 +1,11 @@
 #routes.py
 from celery_worker import celery_app
-from flask import Blueprint, request, jsonify, g, render_template
+from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from api.tasks.tasks import fetch_erc20_transfer_history_task, fetch_token_price_history_task, fetch_last_token_price_history_task
 from api.tasks.fetch_token_data_task import fetch_token_data_task
-from api.tasks.tigergraph_tasks import sync_tokens_to_tigergraph, sync_ghst_transfers_24h, full_tigergraph_sync
+from api.tasks.tigergraph_tasks import sync_tokens_to_tigergraph, sync_token_transfers_24h, full_tigergraph_sync, sync_investigation_addresses
 from api.tasks.import_labels_task import import_labels_from_api, import_labels_for_address
 
 api_bp = Blueprint('api', __name__)
@@ -168,116 +168,100 @@ def get_graph_transfers():
 
 @api_bp.route("/stats/dashboard", methods=['GET'])
 def get_dashboard_stats():
-    """Get statistics for the dashboard via GraphQL schema"""
+    """
+    Get statistics for the dashboard - generalized for any token.
+    Returns aggregate stats across all registered tokens and chains.
+    """
     try:
-        from api.application.erc20models import Token
+        from api.application.erc20models import Token, Investigation, InvestigationWallet, InvestigationTransfer
+        from api.services.data_access import DataAccess
+        
         session = g.db_session
+        data = DataAccess(session)
+        
+        # Get all chains from DB
+        chains = data.get_chain_codes()
         
         stats = {
             'tokens': session.query(Token).count(),
             'transfers': 0,
             'wallets': 0,
-            'chains': ['POL', 'BASE', 'ETH']
+            'chains': chains,
+            'total_cases': 0,
+            'active_cases': 0,
+            'investigating_cases': 0,
+            'total_investigations': 0,
+            'investigation_wallets': 0,
+            'investigation_transfers': 0,
+            'estimated_loss_usd': 0
         }
         
-        # Use GraphQL to get transfer stats
-        from graphql_app.schemas.fetch_erc20_transfer_history_schema import schema
-        
-        query = '''
-            query GetStats($trigram: String!, $symbols: [String]!, $startBlock: Int!, $endBlock: Int!, $limit: Int) {
-                erc20TransferEvents(trigram: $trigram, symbols: $symbols, startBlock: $startBlock, endBlock: $endBlock, limit: $limit) {
-                    edges {
-                        node {
-                            fromContractAddress
-                            toContractAddress
-                        }
-                    }
-                }
-            }
-        '''
-        
-        result = schema.execute(
-            query,
-            variables={
-                'trigram': 'POL',
-                'symbols': ['ghst'],
-                'startBlock': 1,
-                'endBlock': 999999999,
-                'limit': 10000
-            },
-            context={'session': session}
-        )
-        
-        if result.data and result.data.get('erc20TransferEvents'):
-            edges = result.data['erc20TransferEvents'].get('edges', [])
-            stats['transfers'] = len(edges)
+        # Count cases from data source
+        try:
+            all_cases = data.get_cases()
+            stats['total_cases'] = len(all_cases)
+            stats['active_cases'] = len([c for c in all_cases if c.status == 'active'])
+            stats['investigating_cases'] = len([c for c in all_cases if c.status == 'investigating'])
             
-            # Count unique wallets
-            wallets = set()
-            for edge in edges:
-                node = edge.get('node', {})
-                if node.get('fromContractAddress'):
-                    wallets.add(node['fromContractAddress'])
-                if node.get('toContractAddress'):
-                    wallets.add(node['toContractAddress'])
-            stats['wallets'] = len(wallets)
+            # Sum estimated losses
+            total_loss = sum(c.total_stolen_usd or 0 for c in all_cases)
+            stats['estimated_loss_usd'] = total_loss
+        except Exception:
+            pass
+        
+        # Count investigations from DB
+        try:
+            stats['total_investigations'] = session.query(Investigation).count()
+            stats['investigation_wallets'] = session.query(InvestigationWallet).count()
+            stats['investigation_transfers'] = session.query(InvestigationTransfer).count()
+        except Exception:
+            pass
+        
+        # Try to get transfer stats from registered tokens
+        tokens = session.query(Token).limit(10).all()  # Limit for performance
+        
+        all_wallets = set()
+        total_transfers = 0
+        
+        for token in tokens:
+            try:
+                table_name = f"{token.symbol.lower()}_{token.trigram.lower()}_erc20_transfer_event"
+                
+                # Check if table exists
+                check_query = text("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = :table_name
+                    )
+                """)
+                exists = session.execute(check_query, {'table_name': table_name}).scalar()
+                
+                if exists:
+                    # Count transfers
+                    count_query = text(f"SELECT COUNT(*) FROM {table_name} LIMIT 10000")
+                    count = session.execute(count_query).scalar() or 0
+                    total_transfers += min(count, 10000)  # Cap per table
+                    
+                    # Get unique wallets (sample)
+                    wallet_query = text(f"""
+                        SELECT DISTINCT from_contract_address FROM {table_name} LIMIT 1000
+                        UNION
+                        SELECT DISTINCT to_contract_address FROM {table_name} LIMIT 1000
+                    """)
+                    wallets = session.execute(wallet_query).fetchall()
+                    all_wallets.update([w[0] for w in wallets if w[0]])
+                    
+            except Exception as e:
+                continue  # Skip tables that don't exist or have issues
+        
+        stats['transfers'] = total_transfers
+        stats['wallets'] = len(all_wallets)
         
         return jsonify(stats), 200
+        
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
-
-
-# ============================================================================
-# FRONTEND ROUTES
-# ============================================================================
-
-@api_bp.route("/", methods=['GET'])
-def index():
-    """Main dashboard"""
-    return render_template('dashboard.html')
-
-
-@api_bp.route("/admin", methods=['GET'])
-def admin():
-    """Admin panel - Token Management"""
-    return render_template('admin/token_management.html')
-
-
-@api_bp.route("/visualize", methods=['GET'])
-def visualize():
-    """Visualization page"""
-    return render_template('visualizations/transaction_flow.html')
-
-
-@api_bp.route("/investigations", methods=['GET'])
-def investigations_page():
-    """Investigations list page"""
-    return render_template('investigations.html')
-
-
-@api_bp.route("/investigations/<int:investigation_id>", methods=['GET'])
-def investigation_detail_page(investigation_id):
-    """Investigation detail page"""
-    return render_template('investigation_detail.html', investigation_id=investigation_id)
-
-
-@api_bp.route("/classify", methods=['GET'])
-def classify_page():
-    """Wallet classification page with SHAP explainability"""
-    return render_template('classify.html')
-
-
-@api_bp.route("/models", methods=['GET'])
-def models_page():
-    """ML models management page"""
-    return render_template('models.html')
-
-
-@api_bp.route("/audit", methods=['GET'])
-def audit_page():
-    """Audit trail page for compliance"""
-    return render_template('audit.html')
 
 
 # ============================================================================
@@ -314,6 +298,43 @@ def add_token():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/tokens/manual", methods=['POST'])
+def add_token_manual():
+    """Add a token directly without external lookup."""
+    from api.application.erc20models import Token
+    
+    data = request.get_json() or {}
+    symbol = data.get('symbol')
+    name = data.get('name')
+    contract_address = data.get('contract_address')
+    trigram = data.get('trigram')
+    asset_platform_id = data.get('asset_platform_id')
+    
+    if not all([symbol, name, contract_address, trigram, asset_platform_id]):
+        return jsonify({"error": "Missing required fields"}), 400
+    
+    session = g.db_session
+    existing = session.query(Token).filter_by(contract_address=contract_address).first()
+    if existing:
+        return jsonify({"message": "Token already exists", "contract_address": contract_address}), 200
+    
+    token = Token(
+        symbol=symbol,
+        name=name,
+        contract_address=contract_address,
+        asset_platform_id=asset_platform_id,
+        trigram=trigram
+    )
+    session.add(token)
+    session.commit()
+    
+    return jsonify({
+        "message": "Token added",
+        "contract_address": contract_address,
+        "trigram": trigram
+    }), 201
 
 
 @api_bp.route("/tokens/list", methods=['GET'])
@@ -399,16 +420,38 @@ def trigger_token_sync():
     }), 202
 
 
-@api_bp.route("/sync/ghst", methods=['POST'])
-def trigger_ghst_sync():
-    """Trigger GHST transfer sync for last 24h"""
-    chains = request.json.get('chains', ['POL', 'BASE']) if request.is_json else ['POL', 'BASE']
+@api_bp.route("/sync/transfers", methods=['POST'])
+def trigger_transfer_sync():
+    """
+    Trigger token transfer sync for last 24h.
+    Generalized endpoint - specify token and chains.
+    """
+    data = request.json if request.is_json else {}
     
-    task = sync_ghst_transfers_24h.delay(token_symbol='GHST', chains=chains)
+    token_symbol = data.get('token_symbol', 'USDT')  # Default to USDT (most common)
+    chains = data.get('chains', ['ETH', 'POL', 'BSC', 'BASE'])
+    
+    task = sync_token_transfers_24h.delay(token_symbol=token_symbol, chains=chains)
     return jsonify({
-        "message": "GHST transfer sync task submitted",
+        "message": f"{token_symbol} transfer sync task submitted",
         "task_id": task.id,
+        "token": token_symbol,
         "chains": chains
+    }), 202
+
+
+@api_bp.route("/sync/investigation", methods=['POST'])
+def trigger_investigation_sync():
+    """Trigger sync for investigation case addresses"""
+    data = request.json if request.is_json else {}
+    
+    case_id = data.get('case_id')  # Optional - None syncs all
+    
+    task = sync_investigation_addresses.delay(case_id=case_id)
+    return jsonify({
+        "message": "Investigation address sync task submitted",
+        "task_id": task.id,
+        "case_id": case_id or "all"
     }), 202
 
 
@@ -749,31 +792,183 @@ def labels_stats():
         return jsonify({"error": str(e)}), 500
 
 
-@api_bp.route("/bridges/list", methods=['GET'])
-def list_known_bridges():
-    """List all known bridge addresses"""
-    from api.application.erc20models import KnownBridge, CHAIN_ID_TO_TRIGRAM
+@api_bp.route("/labels/categories", methods=['GET'])
+def list_label_categories():
+    """List label categories."""
+    from api.services.data_access import DataAccess
     
-    try:
-        session = g.db_session
-        bridges = session.query(KnownBridge).filter_by(is_active=True).all()
-        
-        return jsonify({
-            "bridges": [
-                {
-                    "address": bridge.address,
-                    "chain_id": bridge.chain_id,
-                    "chain": CHAIN_ID_TO_TRIGRAM.get(bridge.chain_id, 'UNKNOWN'),
-                    "protocol": bridge.protocol,
-                    "direction": bridge.direction,
-                    "name": bridge.name
-                }
-                for bridge in bridges
-            ]
-        }), 200
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    data = DataAccess(g.db_session)
+    categories = data.get_label_categories()
+    
+    return jsonify({
+        "categories": [
+            {
+                "name": c.name,
+                "description": c.description,
+                "risk_level": c.risk_level,
+                "color": c.color,
+                "priority": c.priority
+            }
+            for c in categories
+        ],
+        "total": len(categories)
+    }), 200
+
+
+@api_bp.route("/tags/<address>", methods=['GET'])
+def get_wallet_tags(address):
+    """Get tags for a wallet."""
+    from api.services.data_access import DataAccess
+    
+    data = DataAccess(g.db_session)
+    chain = request.args.get('chain')
+    tags = data.get_wallet_tags(address, chain_code=chain)
+    
+    return jsonify({
+        "address": address,
+        "chain": chain,
+        "tags": [
+            {
+                "id": t.id,
+                "tag": t.tag,
+                "chain": t.chain_code,
+                "source": t.source,
+                "confidence": t.confidence,
+                "category": t.category.name if t.category else None,
+                "risk_level": t.category.risk_level if t.category else None
+            }
+            for t in tags
+        ],
+        "total": len(tags)
+    }), 200
+
+
+@api_bp.route("/tags/<address>", methods=['POST'])
+def add_wallet_tag(address):
+    """Add tag to a wallet."""
+    from api.services.data_access import DataAccess
+    
+    data = DataAccess(g.db_session)
+    body = request.get_json() or {}
+    tag = body.get('tag')
+    chain = (body.get('chain') or 'ETH').upper()
+    source = body.get('source', 'manual')
+    confidence = float(body.get('confidence', 1.0))
+    
+    if not tag:
+        return jsonify({"error": "tag is required"}), 400
+    
+    wt = data.add_wallet_tag(address, chain, tag, source=source, confidence=confidence)
+    g.db_session.commit()
+    
+    return jsonify({
+        "id": wt.id,
+        "address": wt.address,
+        "chain": wt.chain_code,
+        "tag": wt.tag,
+        "source": wt.source,
+        "confidence": wt.confidence
+    }), 201
+
+
+@api_bp.route("/mixers", methods=['GET'])
+def list_mixers():
+    """List known mixers."""
+    from api.services.data_access import DataAccess
+    
+    data = DataAccess(g.db_session)
+    chain = request.args.get('chain')
+    mixers = data.get_mixers(chain_code=chain)
+    
+    return jsonify({
+        "mixers": [
+            {
+                "address": m.address,
+                "chain": m.chain_code,
+                "protocol": m.protocol,
+                "name": m.name,
+                "pool_size": m.pool_size
+            }
+            for m in mixers
+        ],
+        "total": len(mixers)
+    }), 200
+
+
+@api_bp.route("/bridges", methods=['GET'])
+def list_bridges():
+    """List known bridges."""
+    from api.services.data_access import DataAccess
+    
+    data = DataAccess(g.db_session)
+    chain = request.args.get('chain')
+    bridges = data.get_bridges(chain_code=chain)
+    
+    return jsonify({
+        "bridges": [
+            {
+                "address": b.address,
+                "chain": b.chain_code,
+                "protocol": b.protocol,
+                "name": b.name,
+                "direction": b.direction
+            }
+            for b in bridges
+        ],
+        "total": len(bridges)
+    }), 200
+
+
+@api_bp.route("/check/<address>", methods=['GET'])
+def check_address(address):
+    """Check address risk profile using DB data."""
+    from api.services.data_access import DataAccess
+    
+    data = DataAccess(g.db_session)
+    chain = request.args.get('chain')
+    is_mixer = data.is_mixer(address, chain_code=chain)
+    is_bridge = data.is_bridge(address, chain_code=chain)
+    tags = data.get_wallet_tags(address, chain_code=chain)
+    risk_level = _get_risk_level(is_mixer, is_bridge, tags)
+    
+    return jsonify({
+        "address": address,
+        "chain": chain,
+        "is_mixer": is_mixer,
+        "is_bridge": is_bridge,
+        "risk_level": risk_level,
+        "tags": [
+            {
+                "tag": t.tag,
+                "chain": t.chain_code,
+                "source": t.source,
+                "confidence": t.confidence,
+                "category": t.category.name if t.category else None,
+                "risk_level": t.category.risk_level if t.category else None
+            }
+            for t in tags
+        ]
+    }), 200
+
+
+def _get_risk_level(is_mixer: bool, is_bridge: bool, tags: list) -> str:
+    """Determine risk level based on flags and tags."""
+    if is_mixer:
+        return "high"
+    
+    level_rank = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+    tag_levels = [
+        t.category.risk_level
+        for t in tags
+        if t.category and t.category.risk_level
+    ]
+    if tag_levels:
+        return max(tag_levels, key=lambda l: level_rank.get(l, 0))
+    
+    if is_bridge:
+        return "medium"
+    
+    return "low"
 
 
 # ============================================================================
@@ -783,7 +978,13 @@ def list_known_bridges():
 @api_bp.route("/investigations", methods=['GET'])
 def list_investigations():
     """List all investigations"""
-    from api.application.erc20models import Investigation
+    from api.application.erc20models import (
+        Investigation,
+        InvestigationWallet,
+        InvestigationTransfer,
+        TokenPriceHistory
+    )
+    from sqlalchemy import func
     
     try:
         session = g.db_session
@@ -794,23 +995,80 @@ def list_investigations():
             query = query.filter_by(status=status_filter)
         
         investigations = query.order_by(Investigation.created_at.desc()).all()
+
+        victim_roles = {'victim', 'theft_origin'}
         
-        return jsonify({
-            "investigations": [
-                {
-                    "id": inv.id,
-                    "name": inv.name,
-                    "status": inv.status,
-                    "incident_date": inv.incident_date.isoformat() if inv.incident_date else None,
-                    "reported_loss_usd": inv.reported_loss_usd,
-                    "created_by": inv.created_by,
-                    "assigned_to": inv.assigned_to,
-                    "created_at": inv.created_at.isoformat() if inv.created_at else None,
-                    "wallet_count": len(inv.wallets),
-                    "token_count": len(inv.tokens)
+        response_investigations = []
+
+        for inv in investigations:
+            estimated_loss_usd = None
+
+            wallets = session.query(InvestigationWallet).filter_by(
+                investigation_id=inv.id
+            ).all()
+
+            victim_wallets = {
+                w.address for w in wallets if (w.role or '').lower() in victim_roles
+            }
+            if not victim_wallets and wallets:
+                victim_wallets = {w.address for w in wallets}
+
+            if victim_wallets:
+                transfers = session.query(InvestigationTransfer).filter(
+                    InvestigationTransfer.investigation_id == inv.id,
+                    InvestigationTransfer.from_address.in_(victim_wallets)
+                ).all()
+
+                token_contracts = {
+                    t.token_contract for t in transfers if t.token_contract
                 }
-                for inv in investigations
-            ]
+
+                price_map = {}
+                if token_contracts:
+                    price_subq = session.query(
+                        TokenPriceHistory.contract_address.label('contract_address'),
+                        TokenPriceHistory.price.label('price'),
+                        func.row_number().over(
+                            partition_by=TokenPriceHistory.contract_address,
+                            order_by=TokenPriceHistory.timestamp.desc()
+                        ).label('rn')
+                    ).filter(TokenPriceHistory.contract_address.in_(token_contracts)).subquery()
+
+                    latest_prices = session.query(
+                        price_subq.c.contract_address,
+                        price_subq.c.price
+                    ).filter(price_subq.c.rn == 1).all()
+
+                    price_map = {row[0]: row[1] for row in latest_prices}
+
+                estimated_total = 0.0
+                for t in transfers:
+                    if t.value is None:
+                        continue
+                    price = price_map.get(t.token_contract)
+                    if price is None:
+                        continue
+                    estimated_total += float(t.value) * float(price)
+
+                if estimated_total > 0:
+                    estimated_loss_usd = round(estimated_total, 2)
+
+            response_investigations.append({
+                "id": inv.id,
+                "name": inv.name,
+                "status": inv.status,
+                "incident_date": inv.incident_date.isoformat() if inv.incident_date else None,
+                "reported_loss_usd": inv.reported_loss_usd,
+                "estimated_loss_usd": estimated_loss_usd,
+                "created_by": inv.created_by,
+                "assigned_to": inv.assigned_to,
+                "created_at": inv.created_at.isoformat() if inv.created_at else None,
+                "wallet_count": len(inv.wallets),
+                "token_count": len(inv.tokens)
+            })
+
+        return jsonify({
+            "investigations": response_investigations
         }), 200
         
     except Exception as e:
@@ -917,7 +1175,7 @@ def create_investigation():
 @api_bp.route("/investigations/<int:investigation_id>", methods=['GET'])
 def get_investigation(investigation_id):
     """Get investigation details with all wallets and tokens"""
-    from api.application.erc20models import Investigation, CHAIN_ID_TO_TRIGRAM
+    from api.application.erc20models import Investigation, CHAIN_ID_TO_TRIGRAM, TRIGRAM_TO_CHAIN_ID, Token
     
     try:
         session = g.db_session
@@ -969,6 +1227,263 @@ def get_investigation(investigation_id):
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/investigations/<int:investigation_id>/graph", methods=['GET'])
+def get_investigation_graph(investigation_id):
+    """Get wallet flow graph and timeline for an investigation."""
+    from api.application.erc20models import Investigation, InvestigationTransfer, CHAIN_ID_TO_TRIGRAM
+    from graphql_app.schemas.fetch_erc20_transfer_history_schema import schema
+    
+    session = g.db_session
+    investigation = session.query(Investigation).filter_by(id=investigation_id).first()
+    if not investigation:
+        return jsonify({"error": "Investigation not found"}), 404
+    
+    wallet_set = {w.address.lower() for w in investigation.wallets}
+    start_block = int(request.args.get('start_block', 1))
+    end_block = int(request.args.get('end_block', 999999999))
+    limit = int(request.args.get('limit', 500))
+    include_external = request.args.get('include_external', 'true').lower() == 'true'
+    
+    transfers = session.query(InvestigationTransfer).filter_by(
+        investigation_id=investigation_id
+    ).all()
+    if transfers:
+        nodes = {}
+        edges = []
+        events = []
+        min_ts = None
+        max_ts = None
+        edge_id = 0
+        
+        for t in transfers:
+            from_addr = t.from_address
+            to_addr = t.to_address
+            ts = int(t.timestamp.timestamp()) if t.timestamp else None
+            
+            is_case_from = from_addr in wallet_set
+            is_case_to = to_addr in wallet_set
+            if not include_external and not (is_case_from and is_case_to):
+                continue
+            if include_external and not (is_case_from or is_case_to):
+                continue
+            
+            if from_addr not in nodes:
+                nodes[from_addr] = {
+                    "id": from_addr,
+                    "label": f"{from_addr[:6]}...{from_addr[-4:]}",
+                    "is_case_wallet": is_case_from
+                }
+            if to_addr not in nodes:
+                nodes[to_addr] = {
+                    "id": to_addr,
+                    "label": f"{to_addr[:6]}...{to_addr[-4:]}",
+                    "is_case_wallet": is_case_to
+                }
+            
+            edges.append({
+                "id": edge_id,
+                "from": from_addr,
+                "to": to_addr,
+                "value": t.value,
+                "token": t.token_symbol,
+                "chain": t.chain_code,
+                "timestamp": ts,
+                "hash": t.tx_hash,
+                "blockNumber": t.block_number
+            })
+            edge_id += 1
+            
+            if ts:
+                events.append({
+                    "timestamp": ts,
+                    "from": from_addr,
+                    "to": to_addr,
+                    "token": t.token_symbol,
+                    "value": t.value,
+                    "hash": t.tx_hash
+                })
+                if min_ts is None or ts < min_ts:
+                    min_ts = ts
+                if max_ts is None or ts > max_ts:
+                    max_ts = ts
+        
+        return jsonify({
+            "nodes": list(nodes.values()),
+            "edges": edges,
+            "events": events,
+            "stats": {
+                "total_transfers": len(edges),
+                "unique_wallets": len(nodes),
+                "min_timestamp": min_ts,
+                "max_timestamp": max_ts
+            },
+            "message": "Loaded from investigation transfers"
+        }), 200
+    
+    tokens = [t for t in investigation.tokens if t.symbol]
+    token_message = None
+    if not tokens:
+        chain_trigrams = {CHAIN_ID_TO_TRIGRAM.get(w.chain_id) for w in investigation.wallets if CHAIN_ID_TO_TRIGRAM.get(w.chain_id)}
+        if chain_trigrams:
+            fallback = session.query(Token).filter(Token.trigram.in_(list(chain_trigrams))).limit(5).all()
+            tokens = [
+                {
+                    "symbol": t.symbol,
+                    "chain_id": TRIGRAM_TO_CHAIN_ID.get(t.trigram, None)
+                }
+                for t in fallback
+                if t.symbol and TRIGRAM_TO_CHAIN_ID.get(t.trigram, None)
+            ]
+            if tokens:
+                token_message = "No investigation tokens set; using a small default token set for flow discovery"
+        if not tokens:
+            return jsonify({
+                "nodes": [
+                    {
+                        "id": w.address,
+                        "label": f"{w.address[:6]}...{w.address[-4:]}",
+                        "role": w.role,
+                        "is_case_wallet": True
+                    }
+                    for w in investigation.wallets
+                ],
+                "edges": [],
+                "events": [],
+                "stats": {
+                    "total_transfers": 0,
+                    "unique_wallets": len(wallet_set),
+                    "min_timestamp": None,
+                    "max_timestamp": None
+                },
+                "message": "No tokens tracked for this investigation"
+            }), 200
+    
+    query = '''
+        query ERC20TransferEvents($trigram: String!, $symbols: [String]!, $startBlock: Int!, $endBlock: Int!, $limit: Int) {
+            erc20TransferEvents(trigram: $trigram, symbols: $symbols, startBlock: $startBlock, endBlock: $endBlock, limit: $limit) {
+                edges {
+                    node {
+                        blockNumber
+                        hash
+                        tokenSymbol
+                        fromContractAddress
+                        toContractAddress
+                        value
+                        timestamp
+                    }
+                }
+            }
+        }
+    '''
+    
+    nodes = {}
+    edges = []
+    events = []
+    min_ts = None
+    max_ts = None
+    edge_id = 0
+    
+    for token in tokens:
+        token_symbol = token.symbol if hasattr(token, 'symbol') else token.get('symbol')
+        token_chain_id = token.chain_id if hasattr(token, 'chain_id') else token.get('chain_id')
+        if not token_symbol or not token_chain_id:
+            continue
+        trigram = CHAIN_ID_TO_TRIGRAM.get(token_chain_id)
+        if not trigram:
+            continue
+        
+        result = schema.execute(
+            query,
+            variables={
+                'trigram': trigram,
+                'symbols': [token_symbol],
+                'startBlock': start_block,
+                'endBlock': end_block,
+                'limit': limit
+            },
+            context={'session': session}
+        )
+        
+        if result.errors or not result.data:
+            continue
+        
+        transfers = result.data.get('erc20TransferEvents', {}).get('edges', [])
+        for edge in transfers:
+            tx = edge.get('node', {})
+            from_addr = tx.get('fromContractAddress')
+            to_addr = tx.get('toContractAddress')
+            ts = tx.get('timestamp')
+            if isinstance(ts, str):
+                try:
+                    ts = int(ts)
+                except ValueError:
+                    ts = None
+            if not from_addr or not to_addr:
+                continue
+            
+            from_lower = from_addr.lower()
+            to_lower = to_addr.lower()
+            is_case_from = from_lower in wallet_set
+            is_case_to = to_lower in wallet_set
+            
+            if not include_external and not (is_case_from and is_case_to):
+                continue
+            if include_external and not (is_case_from or is_case_to):
+                continue
+            
+            if from_addr not in nodes:
+                nodes[from_addr] = {
+                    "id": from_addr,
+                    "label": f"{from_addr[:6]}...{from_addr[-4:]}",
+                    "is_case_wallet": is_case_from
+                }
+            if to_addr not in nodes:
+                nodes[to_addr] = {
+                    "id": to_addr,
+                    "label": f"{to_addr[:6]}...{to_addr[-4:]}",
+                    "is_case_wallet": is_case_to
+                }
+            
+            edges.append({
+                "id": edge_id,
+                "from": from_addr,
+                "to": to_addr,
+                "value": tx.get('value'),
+                "token": tx.get('tokenSymbol'),
+                "timestamp": ts,
+                "hash": tx.get('hash'),
+                "blockNumber": tx.get('blockNumber')
+            })
+            edge_id += 1
+            
+            if ts:
+                events.append({
+                    "timestamp": ts,
+                    "from": from_addr,
+                    "to": to_addr,
+                    "token": tx.get('tokenSymbol'),
+                    "value": tx.get('value'),
+                    "hash": tx.get('hash')
+                })
+                if min_ts is None or ts < min_ts:
+                    min_ts = ts
+                if max_ts is None or ts > max_ts:
+                    max_ts = ts
+    
+    return jsonify({
+        "nodes": list(nodes.values()),
+        "edges": edges,
+        "events": events,
+        "stats": {
+            "total_transfers": len(edges),
+            "unique_wallets": len(nodes),
+            "min_timestamp": min_ts,
+            "max_timestamp": max_ts
+        },
+        "message": token_message
+    }), 200
 
 
 @api_bp.route("/investigations/<int:investigation_id>/wallets", methods=['POST'])
@@ -1024,6 +1539,88 @@ def add_investigation_wallet(investigation_id):
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/investigations/<int:investigation_id>/sync_transfers", methods=['POST'])
+def sync_investigation_transfers_endpoint(investigation_id):
+    """Sync transfers for investigation wallets (address-based)."""
+    from api.tasks.investigation_tasks import sync_investigation_transfers
+    
+    data = request.get_json() or {}
+    chains = data.get('chains')
+    task = sync_investigation_transfers.delay(investigation_id=investigation_id, chains=chains)
+    
+    return jsonify({
+        "message": "Transfer sync started",
+        "task_id": task.id,
+        "investigation_id": investigation_id
+    }), 202
+
+
+@api_bp.route("/investigations/refresh_loss_data", methods=['POST'])
+def refresh_investigation_loss_data():
+    """Backfill token prices for all investigation transfers (for loss estimation)."""
+    from api.tasks.investigation_tasks import backfill_token_prices_for_transfers
+
+    data = request.get_json() or {}
+    max_days = data.get('max_days', 120)
+
+    task = backfill_token_prices_for_transfers.delay(max_days=max_days)
+    return jsonify({
+        "message": "Loss data refresh started",
+        "task_id": task.id,
+        "max_days": max_days
+    }), 202
+
+
+@api_bp.route("/investigations/<int:investigation_id>/tokens", methods=['POST'])
+def add_investigation_tokens(investigation_id):
+    """Add tokens to an investigation."""
+    from api.application.erc20models import Investigation, InvestigationToken, TRIGRAM_TO_CHAIN_ID
+    
+    data = request.get_json() or {}
+    tokens = data.get('tokens', [])
+    if not tokens:
+        return jsonify({"error": "tokens list is required"}), 400
+    
+    session = g.db_session
+    investigation = session.query(Investigation).filter_by(id=investigation_id).first()
+    if not investigation:
+        return jsonify({"error": "Investigation not found"}), 404
+    
+    added = 0
+    for token in tokens:
+        symbol = token.get('symbol')
+        contract = token.get('contract_address', '').lower()
+        chain = (token.get('chain') or 'ETH').upper()
+        chain_id = TRIGRAM_TO_CHAIN_ID.get(chain)
+        if not symbol or not chain_id:
+            continue
+        
+        existing = session.query(InvestigationToken).filter_by(
+            investigation_id=investigation_id,
+            contract_address=contract,
+            chain_id=chain_id
+        ).first()
+        if existing:
+            continue
+        
+        inv_token = InvestigationToken(
+            investigation_id=investigation_id,
+            contract_address=contract,
+            chain_id=chain_id,
+            symbol=symbol,
+            stolen_amount=token.get('stolen_amount')
+        )
+        session.add(inv_token)
+        added += 1
+    
+    session.commit()
+    return jsonify({
+        "message": "Tokens added",
+        "investigation_id": investigation_id,
+        "tokens_added": added
+    }), 201
 
 
 @api_bp.route("/investigations/<int:investigation_id>/expand", methods=['POST'])
@@ -1082,6 +1679,505 @@ def get_investigation_report(investigation_id):
         return jsonify(result), 404
     
     return jsonify(result), 200
+
+
+# ============================================================================
+# CASE MANAGEMENT ENDPOINTS (External cases from DB)
+# ============================================================================
+
+@api_bp.route("/cases", methods=['POST'])
+def create_case():
+    """Create a new case record with optional wallets."""
+    from api.application.models import Case, CaseWallet
+
+    data = request.get_json() or {}
+    case_id = data.get('case_id')
+    title = data.get('title')
+
+    if not case_id or not title:
+        return jsonify({"error": "Missing required fields: case_id, title"}), 400
+
+    session = g.db_session
+
+    existing = session.query(Case).filter_by(id=case_id).first()
+    if existing:
+        return jsonify({"error": "Case already exists", "case_id": case_id}), 409
+
+    try:
+        case = Case(
+            id=case_id,
+            title=title,
+            source=data.get('source', 'osint'),
+            status=data.get('status', 'active'),
+            severity=data.get('severity', 'medium'),
+            date_reported=datetime.fromisoformat(data['date_reported']) if data.get('date_reported') else None,
+            date_incident=datetime.fromisoformat(data['date_incident']) if data.get('date_incident') else None,
+            summary=data.get('summary'),
+            total_stolen_usd=data.get('total_stolen_usd'),
+            victim_count=data.get('victim_count'),
+            attack_vector=data.get('attack_vector'),
+            notes=data.get('notes')
+        )
+        session.add(case)
+        session.flush()
+
+        wallets = data.get('wallets', [])
+        for w in wallets:
+            if not w.get('address') or not w.get('chain_code'):
+                continue
+            session.add(CaseWallet(
+                case_id=case_id,
+                address=w['address'].lower(),
+                chain_code=w['chain_code'].upper(),
+                label=w.get('label'),
+                role=w.get('role', 'related'),
+                status=w.get('status'),
+                notes=w.get('notes')
+            ))
+
+        session.commit()
+        return jsonify({"message": "Case created", "case_id": case_id}), 201
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/cases", methods=['GET'])
+def list_cases():
+    """List all investigation cases from database."""
+    from api.services.data_access import DataAccess
+    from api.application.erc20models import (
+        Investigation,
+        InvestigationWallet,
+        InvestigationTransfer,
+        TokenPriceHistory,
+        WalletLabel
+    )
+    from sqlalchemy import func
+    
+    try:
+        session = g.db_session
+        data = DataAccess(session)
+        cases = data.get_cases()
+        
+        response_cases = []
+
+        # Role labels for wallet categorization (fallback from InvestigationWallet.role)
+        victim_roles = {'victim', 'theft_origin'}
+        attacker_roles = {'attacker', 'hacker', 'scammer', 'exploiter', 'thief', 'suspect'}
+        exchange_roles = {'exchange', 'cex', 'dex'}
+        bridge_roles = {'bridge', 'cross_chain'}
+        mixer_roles = {'mixer', 'tornado', 'tumbler', 'privacy'}
+        
+        # WalletLabel label_type values for cross-reference
+        exchange_label_types = {'exchange', 'cex', 'dex', 'centralized_exchange', 'decentralized_exchange'}
+        bridge_label_types = {'bridge', 'cross_chain', 'cross-chain'}
+        mixer_label_types = {'mixer', 'tornado', 'tumbler', 'privacy', 'tornado_cash'}
+
+        for c in cases:
+            investigation = session.query(Investigation).filter(
+                Investigation.name.ilike(f"%{c.id}%")
+            ).first()
+            investigation_id = investigation.id if investigation else None
+
+            victim_wallet_count = 0
+            attacker_wallet_count = 0
+            exchange_wallet_count = 0
+            bridge_wallet_count = 0
+            mixer_wallet_count = 0
+            estimated_loss_usd = None
+
+            investigation_status = None
+            investigation_wallet_count = 0
+            investigation_token_count = 0
+            investigation_reported_loss_usd = None
+
+            if investigation:
+                investigation_status = investigation.status
+                investigation_wallet_count = len(investigation.wallets)
+                investigation_token_count = len(investigation.tokens)
+                investigation_reported_loss_usd = investigation.reported_loss_usd
+
+            if investigation_id:
+                wallets = session.query(InvestigationWallet).filter_by(
+                    investigation_id=investigation_id
+                ).all()
+                
+                # Collect all addresses in investigation
+                all_addrs = {w.address.lower() for w in wallets if w.address}
+                
+                # Build sets by role labels from InvestigationWallet
+                labeled_suspects = set()
+                labeled_exchanges = set()
+                labeled_bridges = set()
+                labeled_mixers = set()
+                labeled_victims = set()
+                
+                for w in wallets:
+                    role = (w.role or '').lower()
+                    addr = w.address.lower() if w.address else None
+                    if not addr:
+                        continue
+                    if role in attacker_roles:
+                        labeled_suspects.add(addr)
+                    elif role in exchange_roles:
+                        labeled_exchanges.add(addr)
+                    elif role in bridge_roles:
+                        labeled_bridges.add(addr)
+                    elif role in mixer_roles:
+                        labeled_mixers.add(addr)
+                    elif role in victim_roles:
+                        labeled_victims.add(addr)
+                
+                # Cross-reference with WalletLabel table for known entities (optional)
+                if all_addrs:
+                    try:
+                        wallet_labels = session.query(WalletLabel).filter(
+                            WalletLabel.address.in_(all_addrs)
+                        ).all()
+                        
+                        for lbl in wallet_labels:
+                            addr = lbl.address.lower()
+                            lbl_type = (lbl.label_type or '').lower()
+                            lbl_text = (lbl.label or '').lower()
+                            
+                            # Check label_type
+                            if lbl_type in exchange_label_types or 'exchange' in lbl_text:
+                                labeled_exchanges.add(addr)
+                            elif lbl_type in bridge_label_types or 'bridge' in lbl_text:
+                                labeled_bridges.add(addr)
+                            elif lbl_type in mixer_label_types or 'tornado' in lbl_text or 'mixer' in lbl_text:
+                                labeled_mixers.add(addr)
+                    except Exception:
+                        # WalletLabel table may not exist - rollback and skip
+                        session.rollback()
+                
+                # Get all transfers for this investigation
+                transfers = session.query(InvestigationTransfer).filter_by(
+                    investigation_id=investigation_id
+                ).all()
+                
+                # Build transfer graph to derive categories
+                senders = set()  # addresses that send
+                receivers = set()  # addresses that receive
+                
+                for t in transfers:
+                    from_addr = (t.from_address or '').lower()
+                    to_addr = (t.to_address or '').lower()
+                    if from_addr:
+                        senders.add(from_addr)
+                    if to_addr:
+                        receivers.add(to_addr)
+                
+                # Derive suspects: wallets that RECEIVE funds AND are in investigation
+                # (excluding known exchanges/bridges/mixers)
+                known_services = labeled_exchanges | labeled_bridges | labeled_mixers
+                
+                # If we have labeled suspects, use those as seed
+                if labeled_suspects:
+                    suspect_addrs = labeled_suspects
+                else:
+                    # Derive: addresses that receive but are NOT known services
+                    # and are part of the investigation wallets
+                    suspect_addrs = (receivers & all_addrs) - known_services - labeled_victims
+                
+                # Derive victims: addresses that SEND to suspects
+                derived_victims = set()
+                for t in transfers:
+                    to_addr = (t.to_address or '').lower()
+                    from_addr = (t.from_address or '').lower()
+                    if to_addr in suspect_addrs and from_addr not in suspect_addrs:
+                        derived_victims.add(from_addr)
+                
+                # Derive exchanges/bridges/mixers from transfers
+                # = addresses that RECEIVE from suspects (outflow destinations)
+                derived_exchanges = set()
+                derived_bridges = set()
+                derived_mixers = set()
+                
+                for t in transfers:
+                    from_addr = (t.from_address or '').lower()
+                    to_addr = (t.to_address or '').lower()
+                    if from_addr in suspect_addrs and to_addr not in suspect_addrs:
+                        # Outflow from suspect - check if known service
+                        if to_addr in labeled_exchanges:
+                            derived_exchanges.add(to_addr)
+                        elif to_addr in labeled_bridges:
+                            derived_bridges.add(to_addr)
+                        elif to_addr in labeled_mixers:
+                            derived_mixers.add(to_addr)
+                
+                # Final counts
+                victim_wallet_count = len(derived_victims) if derived_victims else len(labeled_victims)
+                attacker_wallet_count = len(suspect_addrs)
+                exchange_wallet_count = len(derived_exchanges) if derived_exchanges else len(labeled_exchanges)
+                bridge_wallet_count = len(derived_bridges) if derived_bridges else len(labeled_bridges)
+                mixer_wallet_count = len(derived_mixers) if derived_mixers else len(labeled_mixers)
+                
+                # For loss calculation, use derived victims if available
+                victim_wallets = derived_victims if derived_victims else labeled_victims
+                if not victim_wallets and wallets:
+                    # Fallback: use senders as potential victims
+                    victim_wallets = senders & all_addrs
+
+                if victim_wallets:
+                    outgoing_transfers = [
+                        t for t in transfers 
+                        if (t.from_address or '').lower() in victim_wallets
+                    ]
+
+                    token_contracts = {
+                        t.token_contract for t in outgoing_transfers if t.token_contract
+                    }
+
+                    price_map = {}
+                    if token_contracts:
+                        price_subq = session.query(
+                            TokenPriceHistory.contract_address.label('contract_address'),
+                            TokenPriceHistory.price.label('price'),
+                            func.row_number().over(
+                                partition_by=TokenPriceHistory.contract_address,
+                                order_by=TokenPriceHistory.timestamp.desc()
+                            ).label('rn')
+                        ).filter(TokenPriceHistory.contract_address.in_(token_contracts)).subquery()
+
+                        latest_prices = session.query(
+                            price_subq.c.contract_address,
+                            price_subq.c.price
+                        ).filter(price_subq.c.rn == 1).all()
+
+                        price_map = {row[0]: row[1] for row in latest_prices}
+
+                    estimated_total = 0.0
+                    for t in outgoing_transfers:
+                        if t.value is None:
+                            continue
+                        price = price_map.get(t.token_contract)
+                        if price is None:
+                            continue
+                        estimated_total += float(t.value) * float(price)
+
+                    if estimated_total > 0:
+                        estimated_loss_usd = round(estimated_total, 2)
+
+            response_cases.append({
+                "case_id": c.id,
+                "title": c.title,
+                "source": c.source,
+                "status": c.status,
+                "severity": c.severity,
+                "date_reported": c.date_reported.isoformat() if c.date_reported else None,
+                "summary": c.summary,
+                "total_stolen_usd": c.total_stolen_usd,
+                "estimated_loss_usd": estimated_loss_usd,
+                "victim_count": c.victim_count,
+                "victim_wallet_count": victim_wallet_count,
+                "attacker_wallet_count": attacker_wallet_count,
+                "exchange_wallet_count": exchange_wallet_count,
+                "bridge_wallet_count": bridge_wallet_count,
+                "mixer_wallet_count": mixer_wallet_count,
+                "attack_vector": c.attack_vector,
+                "address_count": len(c.wallets),
+                "mixer_deposit_count": len(c.mixer_deposits),
+                "bridge_activity_count": len(c.bridge_activities),
+                "chains_involved": sorted({w.chain_code for w in c.wallets if w.chain_code}),
+                "investigation_id": investigation_id,
+                "investigation_status": investigation_status,
+                "investigation_wallet_count": investigation_wallet_count,
+                "investigation_token_count": investigation_token_count,
+                "investigation_reported_loss_usd": investigation_reported_loss_usd
+            })
+
+        return jsonify({
+            "cases": response_cases,
+            "total": len(cases)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@api_bp.route("/cases/<case_id>", methods=['GET'])
+def get_case(case_id):
+    """Get detailed case information."""
+    from api.services.data_access import DataAccess
+    
+    try:
+        data = DataAccess(g.db_session)
+        case = data.get_case(case_id)
+        
+        if not case:
+            return jsonify({"error": f"Case not found: {case_id}"}), 404
+        
+        all_addresses = [{
+            "address": w.address,
+            "chains": [w.chain_code],
+            "label": w.label,
+            "role": w.role,
+            "status": w.status,
+            "type": "evm"
+        } for w in case.wallets]
+        
+        return jsonify({
+            "case_id": case.id,
+            "title": case.title,
+            "source": case.source,
+            "status": case.status,
+            "severity": case.severity,
+            "date_reported": case.date_reported.isoformat() if case.date_reported else None,
+            "summary": case.summary,
+            "total_stolen_usd": case.total_stolen_usd,
+            "victim_count": case.victim_count,
+            "attack_vector": case.attack_vector,
+            "notes": case.notes,
+            "theft_addresses": all_addresses,
+            "mixer_deposits": [{"protocol": m.mixer_protocol, "amount": m.amount, "chain": m.chain_code} for m in case.mixer_deposits],
+            "bridge_activity": [{"from_chain": b.from_chain, "to_chain": b.to_chain, "amount_usd": b.amount_usd} for b in case.bridge_activities]
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@api_bp.route("/cases/<case_id>/import", methods=['POST'])
+def import_case_to_investigation(case_id):
+    """Import a case from DB into an Investigation record."""
+    from api.services.data_access import DataAccess
+    from api.application.erc20models import Investigation, InvestigationWallet, TRIGRAM_TO_CHAIN_ID
+    
+    try:
+        data = DataAccess(g.db_session)
+        case = data.get_case(case_id)
+        
+        if not case:
+            return jsonify({"error": f"Case not found: {case_id}"}), 404
+        
+        session = g.db_session
+        
+        existing = session.query(Investigation).filter(
+            Investigation.name.like(f"%{case.id}%")
+        ).first()
+        
+        if existing:
+            return jsonify({
+                "error": "Case already imported",
+                "investigation_id": existing.id
+            }), 409
+        
+        investigation = Investigation(
+            name=f"[{case.id}] {case.title}",
+            description=f"Source: {case.source}\nAttack: {case.attack_vector}\n\n{case.notes or ''}",
+            status='open',
+            reported_loss_usd=case.total_stolen_usd,
+            created_by=f"{case.source}_import"
+        )
+        session.add(investigation)
+        session.flush()
+        
+        addresses_added = 0
+        for wallet in case.wallets:
+            chain_id = TRIGRAM_TO_CHAIN_ID.get(wallet.chain_code, 1)
+            
+            inv_wallet = InvestigationWallet(
+                investigation_id=investigation.id,
+                address=wallet.address.lower(),
+                chain_id=chain_id,
+                role=wallet.role or 'related',
+                depth=0,
+                notes=wallet.label
+            )
+            session.add(inv_wallet)
+            addresses_added += 1
+        
+        session.commit()
+        
+        return jsonify({
+            "message": "Case imported successfully",
+            "investigation_id": investigation.id,
+            "case_id": case.id,
+            "addresses_added": addresses_added
+        }), 201
+        
+    except Exception as e:
+        g.db_session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/cases/theft-addresses", methods=['GET'])
+def get_all_theft_addresses():
+    """Get all theft addresses from all cases."""
+    from api.services.data_access import DataAccess
+    
+    try:
+        data = DataAccess(g.db_session)
+        cases = data.get_cases()
+        
+        addresses = []
+        for case in cases:
+            for w in case.wallets:
+                addresses.append({"address": w.address, "chain": w.chain_code, "case_id": case.id, "label": w.label})
+        
+        by_chain = {}
+        for addr in addresses:
+            chain = addr['chain'].upper()
+            if chain not in by_chain:
+                by_chain[chain] = []
+            by_chain[chain].append(addr)
+        
+        return jsonify({
+            "addresses": addresses,
+            "by_chain": by_chain,
+            "total": len(addresses)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/chains", methods=['GET'])
+def list_chains():
+    """List all supported chains."""
+    from api.services.data_access import DataAccess
+    
+    try:
+        data = DataAccess(g.db_session)
+        chains = data.get_chains()
+        
+        return jsonify({
+            "chains": [{"trigram": c.code, "name": c.name, "chain_id": c.chain_id, "native_token": c.native_token, "is_active": c.is_active} for c in chains],
+            "total": len(chains)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/chains/<trigram>", methods=['GET'])
+def get_chain(trigram):
+    """Get chain details."""
+    from api.services.data_access import DataAccess
+    
+    try:
+        data = DataAccess(g.db_session)
+        chain = data.get_chain(trigram.upper())
+        
+        if not chain:
+            return jsonify({"error": f"Chain not found: {trigram}"}), 404
+        
+        return jsonify({
+            "trigram": chain.code,
+            "name": chain.name,
+            "chain_id": chain.chain_id,
+            "native_token": chain.native_token,
+            "explorer_name": chain.explorer_name,
+            "explorer_api_url": chain.explorer_api_url,
+            "is_active": chain.is_active
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/investigations/<int:investigation_id>/status", methods=['PUT'])
@@ -1753,7 +2849,397 @@ def task_status(task_id):
         return jsonify({'state': task.state, 'status': 'Task failed', 'error': str(task.info)})
     else:
         return jsonify({'state': task.state, 'status': 'Task is in progress'})
-#http://localhost:9999/api/task_status/<task_id>
+
+
+# ============================================================================
+# REAL-TIME MONITORING ENDPOINTS
+# ============================================================================
+
+@api_bp.route("/monitor/suspects", methods=['GET'])
+def get_suspect_wallets_for_monitoring():
+    """
+    Get all suspect wallets from investigations for monitoring.
+    Returns wallets tagged as attacker/suspect with their last activity info.
+    """
+    from api.application.erc20models import (
+        Investigation, InvestigationWallet, InvestigationTransfer, CHAIN_ID_TO_TRIGRAM
+    )
+    from sqlalchemy import func, desc
+    
+    session = g.db_session
+    
+    attacker_roles = {'attacker', 'hacker', 'scammer', 'exploiter', 'thief', 'suspect'}
+    
+    # Get all suspect wallets from all investigations
+    wallets = session.query(InvestigationWallet).filter(
+        func.lower(InvestigationWallet.role).in_(attacker_roles)
+    ).all()
+    
+    result = []
+    for w in wallets:
+        # Get chain code from chain_id
+        chain_code = CHAIN_ID_TO_TRIGRAM.get(w.chain_id, 'ETH')
+        
+        # Get investigation name
+        investigation = session.query(Investigation).filter_by(id=w.investigation_id).first()
+        inv_name = investigation.name if investigation else None
+        
+        # Get last outgoing transfer (movement out)
+        last_out = session.query(InvestigationTransfer).filter(
+            InvestigationTransfer.investigation_id == w.investigation_id,
+            func.lower(InvestigationTransfer.from_address) == w.address.lower()
+        ).order_by(desc(InvestigationTransfer.timestamp)).first()
+        
+        # Get last incoming transfer
+        last_in = session.query(InvestigationTransfer).filter(
+            InvestigationTransfer.investigation_id == w.investigation_id,
+            func.lower(InvestigationTransfer.to_address) == w.address.lower()
+        ).order_by(desc(InvestigationTransfer.timestamp)).first()
+        
+        # Count total outflows and their destinations
+        outflows = session.query(InvestigationTransfer).filter(
+            InvestigationTransfer.investigation_id == w.investigation_id,
+            func.lower(InvestigationTransfer.from_address) == w.address.lower()
+        ).all()
+        
+        total_out_value = sum(float(t.value or 0) for t in outflows)
+        destinations = list(set(t.to_address for t in outflows if t.to_address))
+        
+        result.append({
+            "address": w.address,
+            "chain": chain_code,
+            "role": w.role,
+            "label": w.notes or '',
+            "investigation_id": w.investigation_id,
+            "investigation_name": inv_name,
+            "last_out_tx": last_out.tx_hash if last_out else None,
+            "last_out_time": last_out.timestamp.isoformat() if last_out and last_out.timestamp else None,
+            "last_out_to": last_out.to_address if last_out else None,
+            "last_out_value": float(last_out.value) if last_out and last_out.value else None,
+            "last_out_token": last_out.token_symbol if last_out else None,
+            "last_in_time": last_in.timestamp.isoformat() if last_in and last_in.timestamp else None,
+            "total_outflows": len(outflows),
+            "total_out_value": total_out_value,
+            "unique_destinations": len(destinations)
+        })
+    
+    # Sort by last activity (most recent first)
+    result.sort(key=lambda x: x.get('last_out_time') or '', reverse=True)
+    
+    return jsonify({
+        "suspects": result,
+        "total": len(result)
+    }), 200
+
+
+@api_bp.route("/monitor/wallets", methods=['GET'])
+def get_monitored_wallets():
+    """Get list of monitored wallets."""
+    from api.services.wallet_monitor import WalletMonitorService
+    
+    chain = request.args.get('chain')
+    case_id = request.args.get('case_id')
+    
+    monitor = WalletMonitorService(g.db_session)
+    wallets = monitor.get_wallets(chain=chain, case_id=case_id)
+    
+    return jsonify({
+        "wallets": [
+            {
+                "address": w.address,
+                "chain": w.chain_code,
+                "case_id": w.case_id,
+                "label": w.label,
+                "added_at": w.added_at.isoformat() if w.added_at else None,
+                "last_activity": w.last_activity.isoformat() if w.last_activity else None,
+                "alert_count": w.alert_count or 0,
+                "total_in": w.total_in_usd or 0,
+                "total_out": w.total_out_usd or 0
+            }
+            for w in wallets
+        ],
+        "total": len(wallets)
+    }), 200
+
+
+@api_bp.route("/monitor/wallets", methods=['POST'])
+def add_monitored_wallet():
+    """Add a wallet to monitoring."""
+    from api.services.wallet_monitor import WalletMonitorService
+    
+    data = request.get_json()
+    
+    if not data.get('address'):
+        return jsonify({"error": "Missing required field: address"}), 400
+    
+    monitor = WalletMonitorService(g.db_session)
+    wallet = monitor.add_wallet(
+        address=data['address'],
+        chain=data.get('chain', 'ETH'),
+        case_id=data.get('case_id'),
+        label=data.get('label', '')
+    )
+    
+    g.db_session.commit()
+    
+    return jsonify({
+        "message": "Wallet added to monitoring",
+        "address": wallet.address,
+        "chain": wallet.chain_code
+    }), 201
+
+
+@api_bp.route("/monitor/wallets/<address>", methods=['DELETE'])
+def remove_monitored_wallet(address):
+    """Remove a wallet from monitoring."""
+    from api.services.wallet_monitor import WalletMonitorService
+    
+    chain = request.args.get('chain', 'ETH')
+    
+    monitor = WalletMonitorService(g.db_session)
+    removed = monitor.remove_wallet(address, chain)
+    
+    if removed:
+        g.db_session.commit()
+        return jsonify({"message": "Wallet removed from monitoring"}), 200
+    return jsonify({"error": "Wallet not found in monitoring"}), 404
+
+
+@api_bp.route("/monitor/cases/<case_id>/start", methods=['POST'])
+def start_case_monitoring(case_id):
+    """Start monitoring all addresses from a case."""
+    from api.tasks.monitor_tasks import start_case_monitoring as start_task
+    
+    task = start_task.delay(case_id)
+    
+    return jsonify({
+        "message": "Case monitoring started",
+        "task_id": task.id,
+        "case_id": case_id
+    }), 202
+
+
+@api_bp.route("/monitor/alerts", methods=['GET'])
+def get_alerts():
+    """Get recent alerts."""
+    from api.services.wallet_monitor import WalletMonitorService
+    
+    chain = request.args.get('chain')
+    case_id = request.args.get('case_id')
+    alert_type = request.args.get('type')
+    hours = int(request.args.get('hours', 24))
+    limit = int(request.args.get('limit', 100))
+    
+    since = datetime.utcnow() - timedelta(hours=hours)
+    
+    monitor = WalletMonitorService(g.db_session)
+    alerts = monitor.get_alerts(
+        chain=chain,
+        case_id=case_id,
+        alert_type=alert_type,
+        since=since,
+        limit=limit
+    )
+    
+    return jsonify({
+        "alerts": [monitor.to_dict(a) for a in alerts],
+        "total": len(alerts)
+    }), 200
+
+
+@api_bp.route("/monitor/stats", methods=['GET'])
+def get_monitor_stats():
+    """Get monitoring statistics."""
+    from api.services.wallet_monitor import WalletMonitorService
+    
+    monitor = WalletMonitorService(g.db_session)
+    stats = monitor.get_stats()
+    
+    return jsonify(stats), 200
+
+
+@api_bp.route("/monitor/check", methods=['POST'])
+def trigger_activity_check():
+    """Trigger manual activity check on monitored wallets."""
+    from api.tasks.monitor_tasks import check_wallet_activity
+    
+    data = request.get_json() or {}
+    chain = data.get('chain')
+    
+    task = check_wallet_activity.delay(chain=chain)
+    
+    return jsonify({
+        "message": "Activity check started",
+        "task_id": task.id,
+        "chain": chain or "all"
+    }), 202
+
+
+# ============================================================================
+# FEATURE ENGINEERING ENDPOINTS
+# ============================================================================
+
+@api_bp.route("/features/<address>", methods=['GET'])
+def get_wallet_features(address):
+    """Extract features for a wallet address."""
+    from api.services.feature_engineer import WalletFeatureEngineer
+    
+    chain = request.args.get('chain', 'ETH').upper()
+    lookback_days = int(request.args.get('lookback_days', 90))
+    
+    try:
+        engineer = WalletFeatureEngineer(session=g.db_session)
+        features = engineer.extract_features(
+            address=address,
+            chain=chain,
+            lookback_days=lookback_days
+        )
+        
+        return jsonify({
+            "address": address,
+            "chain": chain,
+            "lookback_days": lookback_days,
+            "feature_count": len(features),
+            "features": features
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@api_bp.route("/features/names", methods=['GET'])
+def get_feature_names():
+    """Get list of all feature names with categories."""
+    from api.services.feature_engineer import WalletFeatureEngineer
+    
+    engineer = WalletFeatureEngineer()
+    
+    return jsonify({
+        "feature_names": engineer.get_feature_names(),
+        "feature_categories": engineer.get_feature_importance_groups(),
+        "total_features": len(engineer.get_feature_names())
+    }), 200
+
+
+# ============================================================================
+# NOTEBOOK EXECUTION ENDPOINTS
+# ============================================================================
+
+@api_bp.route("/notebooks", methods=['GET'])
+def list_notebooks():
+    """List available analysis notebooks."""
+    from api.services.notebook_runner import get_notebook_runner
+    
+    try:
+        runner = get_notebook_runner()
+        notebooks = runner.list_available_notebooks()
+        return jsonify({"notebooks": notebooks}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/notebooks/execute", methods=['POST'])
+def execute_notebook():
+    """Execute an analysis notebook."""
+    from api.services.notebook_runner import get_notebook_runner
+    from api.tasks.monitor_tasks import run_notebook_task
+    
+    data = request.get_json() or {}
+    notebook_name = data.get('notebook')
+    parameters = data.get('parameters', {})
+    async_exec = data.get('async', True)
+    
+    if not notebook_name:
+        return jsonify({"error": "Missing 'notebook' parameter"}), 400
+    
+    try:
+        if async_exec:
+            # Run async via Celery
+            task = run_notebook_task.delay(notebook_name, parameters)
+            return jsonify({
+                "status": "queued",
+                "task_id": task.id,
+                "notebook": notebook_name
+            }), 202
+        else:
+            # Run synchronously
+            runner = get_notebook_runner()
+            execution = runner.execute_notebook(notebook_name, parameters)
+            return jsonify(execution.to_dict()), 200
+            
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@api_bp.route("/notebooks/executions", methods=['GET'])
+def list_executions():
+    """List notebook execution history."""
+    from api.services.notebook_runner import get_notebook_runner
+    
+    limit = int(request.args.get('limit', 50))
+    
+    try:
+        runner = get_notebook_runner()
+        executions = runner.get_all_executions(limit=limit)
+        return jsonify({
+            "executions": [e.to_dict() for e in executions],
+            "total": len(executions)
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/notebooks/executions/<job_id>", methods=['GET'])
+def get_execution(job_id):
+    """Get execution status by job ID."""
+    from api.services.notebook_runner import get_notebook_runner
+    
+    try:
+        runner = get_notebook_runner()
+        execution = runner.get_execution(job_id)
+        
+        if not execution:
+            return jsonify({"error": f"Execution {job_id} not found"}), 404
+            
+        return jsonify(execution.to_dict()), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/notebooks/analyze", methods=['POST'])
+def run_analysis():
+    """Run a pre-defined analysis on addresses."""
+    from api.services.notebook_runner import get_notebook_runner
+    
+    data = request.get_json() or {}
+    analysis_type = data.get('analysis_type')
+    addresses = data.get('addresses', [])
+    chain = data.get('chain', 'ETH')
+    case_id = data.get('case_id')
+    
+    if not analysis_type:
+        return jsonify({"error": "Missing 'analysis_type' parameter"}), 400
+    if not addresses:
+        return jsonify({"error": "Missing 'addresses' parameter"}), 400
+    
+    try:
+        runner = get_notebook_runner()
+        execution = runner.execute_analysis(
+            analysis_type=analysis_type,
+            addresses=addresses,
+            chain=chain,
+            case_id=case_id,
+            **{k: v for k, v in data.items() if k not in ['analysis_type', 'addresses', 'chain', 'case_id']}
+        )
+        return jsonify(execution.to_dict()), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
 
 def init_api_routes(app):
     app.register_blueprint(api_bp, url_prefix='/api')

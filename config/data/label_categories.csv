@@ -1,0 +1,15 @@
+name,description,risk_level,color,priority
+exchange,Centralized exchange wallet,low,#3B82F6,1
+bridge,Cross-chain bridge contract,medium,#F59E0B,2
+mixer,Privacy mixer/tumbler,high,#8B5CF6,5
+defi,DeFi protocol contract,low,#10B981,1
+whale,High-value wallet,medium,#6366F1,2
+bot,Automated trading bot,low,#6B7280,1
+potential_hacker,Suspected attacker wallet,critical,#EF4444,10
+confirmed_hacker,Confirmed attacker wallet,critical,#DC2626,10
+theft_origin,Original theft wallet,critical,#B91C1C,10
+laundering,Money laundering activity,critical,#991B1B,9
+scam,Known scam address,high,#F87171,8
+phishing,Phishing address,high,#FB923C,7
+contract,Smart contract,low,#9CA3AF,0
+eoa,Externally owned account,low,#D1D5DB,0

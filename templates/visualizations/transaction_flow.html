@@ -1,35 +1,106 @@
 {% extends "base.html" %}
 
-{% block title %}Transaction Graph{% endblock %}
+{% block title %}{% if investigation_id %}Case Graph{% else %}Transaction Graph{% endif %}{% endblock %}
 
 {% block extra_css %}
 <script src="https://unpkg.com/vis-network@9.1.2/standalone/umd/vis-network.min.js"></script>
+<style>
+    .investigation-header {
+        margin-bottom: 1.5rem;
+    }
+    .investigation-header .back-link {
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 0.85rem;
+        display: inline-block;
+        margin-bottom: 0.5rem;
+    }
+    .investigation-header .back-link:hover {
+        color: var(--primary);
+    }
+    .investigation-header .page-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0;
+    }
+    .investigation-header .page-subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-top: 0.25rem;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1 class="page-title">Transaction Flow Graph</h1>
-    <p class="page-subtitle">Visualize token transfer patterns • Powered by GraphQL API</p>
+{% if investigation_id %}
+<!-- Investigation Mode Header -->
+<div class="investigation-header" id="investigation-header">
+    <a href="/cases" class="back-link">← Back to Cases</a>
+    <h1 class="page-title" id="inv-title">Loading case...</h1>
+    <p class="page-subtitle" id="inv-subtitle"></p>
 </div>
 
-<!-- Controls -->
-<div class="controls-bar">
+<!-- Investigation Controls -->
+<div class="controls-bar" id="inv-controls">
     <div class="control-group">
-        <label for="chain-select">Chain:</label>
-        <select id="chain-select" class="form-control">
-            <option value="POL">Polygon</option>
-            <option value="BASE">Base</option>
-            <option value="ETH">Ethereum</option>
+        <label for="inv-min-value">Min Value:</label>
+        <input type="number" id="inv-min-value" class="form-control" value="0" min="0" step="0.1" style="width: 100px;">
+    </div>
+    
+    <div class="control-group">
+        <label for="inv-chain-filter">Chain:</label>
+        <select id="inv-chain-filter" class="form-control">
+            <option value="all">All Chains</option>
         </select>
     </div>
     
     <div class="control-group">
-        <label for="symbol-select">Token:</label>
-        <select id="symbol-select" class="form-control">
-            <option value="ghst">GHST</option>
-            <option value="gltr">GLTR</option>
-            <option value="kek">KEK</option>
-            <option value="fud">FUD</option>
+        <label for="inv-token-filter">Token:</label>
+        <select id="inv-token-filter" class="form-control">
+            <option value="all">All Tokens</option>
+        </select>
+    </div>
+
+    <div class="control-group" style="margin-left: auto;">
+        <button onclick="applyInvestigationFilters()" class="btn btn-primary">
+            Apply Filters
+        </button>
+        <button onclick="resetInvestigationFilters()" class="btn btn-secondary">
+            Reset
+        </button>
+        <button onclick="exportGraph()" class="btn btn-secondary">
+            Export
+        </button>
+    </div>
+</div>
+{% else %}
+<div class="page-header">
+    <h1 class="page-title">Transaction Flow Graph</h1>
+    <p class="page-subtitle">Visualize token transfer patterns • Powered by GraphQL API</p>
+</div>
+{% endif %}
+
+<!-- Controls -->
+<div class="controls-bar" {% if investigation_id %}style="display:none;" id="standard-controls"{% endif %}>
+    <div class="control-group">
+        <label for="chain-select">Chain:</label>
+        <select id="chain-select" class="form-control">
+            <option value="ETH">Ethereum</option>
+            <option value="POL">Polygon</option>
+            <option value="BSC">BNB Chain</option>
+            <option value="BASE">Base</option>
+            <option value="ARB">Arbitrum</option>
+            <option value="OP">Optimism</option>
+            <option value="AVAX">Avalanche</option>
+            <option value="FTM">Fantom</option>
+        </select>
+    </div>
+    
+    <div class="control-group">
+        <label for="token-select">Token:</label>
+        <select id="token-select" class="form-control">
+            <option value="">Loading tokens...</option>
         </select>
     </div>
     
@@ -41,6 +112,11 @@
             <option value="500" selected>500</option>
             <option value="1000">1,000</option>
         </select>
+    </div>
+    
+    <div class="control-group">
+        <label for="min-value">Min Value:</label>
+        <input type="number" id="min-value" class="form-control" value="0" min="0" step="1" style="width: 100px;">
     </div>
 
     <div class="control-group" style="margin-left: auto;">
@@ -85,9 +161,27 @@
 <div class="visualization-container">
     <div id="network-graph"></div>
     
-    <div class="legend">
-        <h4>Legend</h4>
+    <div class="legend" id="legend">
+        <h4>LEGEND</h4>
         <div class="legend-items">
+            {% if investigation_id %}
+            <div class="legend-item">
+                <span class="legend-color" style="background: #ff6b6b;"></span>
+                <span>Case Wallet</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #00d4ff;"></span>
+                <span>External Wallet</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #f59e0b;"></span>
+                <span>High Volume</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #a855f7;"></span>
+                <span>Exchange/Contract</span>
+            </div>
+            {% else %}
             <div class="legend-item">
                 <span class="legend-color" style="background: #00d4ff;"></span>
                 <span>Regular Wallet</span>
@@ -100,6 +194,7 @@
                 <span class="legend-color" style="background: #51cf66;"></span>
                 <span>Contract / Exchange</span>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -155,7 +250,12 @@
         
         network.on('click', function(params) {
             if (params.nodes.length > 0) {
-                showNodeDetails(params.nodes[0]);
+                // Use investigation-specific handler if rawGraphData exists
+                if (rawGraphData) {
+                    showInvestigationNodeDetails(params.nodes[0]);
+                } else {
+                    showNodeDetails(params.nodes[0]);
+                }
             }
         });
         
@@ -168,13 +268,124 @@
         });
     }
     
+    function showInvestigationNodeDetails(nodeId) {
+        if (!rawGraphData) return;
+        
+        const node = rawGraphData.nodes.find(n => n.id === nodeId);
+        const detailsDiv = document.getElementById('node-details');
+        const infoDiv = document.getElementById('node-info');
+        
+        // Calculate incoming and outgoing from raw data
+        const incoming = rawGraphData.edges.filter(e => e.to === nodeId);
+        const outgoing = rawGraphData.edges.filter(e => e.from === nodeId);
+        
+        // Group by token
+        const inByToken = {};
+        const outByToken = {};
+        
+        incoming.forEach(e => {
+            const t = e.token || 'UNKNOWN';
+            inByToken[t] = (inByToken[t] || 0) + (e.value || 0);
+        });
+        
+        outgoing.forEach(e => {
+            const t = e.token || 'UNKNOWN';
+            outByToken[t] = (outByToken[t] || 0) + (e.value || 0);
+        });
+        
+        // Get all tokens involved
+        const allTokens = new Set([...Object.keys(inByToken), ...Object.keys(outByToken)]);
+        
+        // Build summary
+        let inSummary = Object.entries(inByToken)
+            .map(([t, v]) => `${formatVolume(v)} ${t}`)
+            .join(', ') || 'None';
+        let outSummary = Object.entries(outByToken)
+            .map(([t, v]) => `${formatVolume(v)} ${t}`)
+            .join(', ') || 'None';
+        
+        // Net flow per token
+        const netFlow = {};
+        allTokens.forEach(t => {
+            netFlow[t] = (inByToken[t] || 0) - (outByToken[t] || 0);
+        });
+        let netSummary = Object.entries(netFlow)
+            .map(([t, v]) => `${v >= 0 ? '+' : ''}${formatVolume(v)} ${t}`)
+            .join(', ') || '0';
+        
+        // Get chain for explorer link
+        const firstEdge = [...incoming, ...outgoing][0];
+        const chain = firstEdge?.chain || 'ETH';
+        
+        const explorers = {
+            'ETH': 'https://etherscan.io',
+            'POL': 'https://polygonscan.com',
+            'BSC': 'https://bscscan.com',
+            'BASE': 'https://basescan.org',
+            'ARB': 'https://arbiscan.io',
+            'OP': 'https://optimistic.etherscan.io',
+            'AVAX': 'https://snowtrace.io',
+            'FTM': 'https://ftmscan.com'
+        };
+        const explorerUrl = explorers[chain] || 'https://etherscan.io';
+        
+        const isCaseWallet = node?.is_case_wallet;
+        
+        infoDiv.innerHTML = `
+            <p><strong>Address:</strong> <a href="${explorerUrl}/address/${nodeId}" target="_blank" style="color: var(--primary);">${nodeId}</a></p>
+            ${isCaseWallet ? '<p><span style="color: #ff6b6b; font-weight: bold;">⚠ Case Wallet</span></p>' : ''}
+            <p><strong>Incoming:</strong> ${incoming.length} txs (${inSummary})</p>
+            <p><strong>Outgoing:</strong> ${outgoing.length} txs (${outSummary})</p>
+            <p><strong>Net Flow:</strong> ${netSummary}</p>
+            <p class="mt-md">
+                <a href="${explorerUrl}/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">
+                    View on Explorer
+                </a>
+                <button onclick="addToInvestigation('${nodeId}')" class="btn btn-primary btn-sm">
+                    Investigate
+                </button>
+            </p>
+        `;
+        
+        detailsDiv.style.display = 'block';
+    }
+    
+    function addToInvestigation(address) {
+        if (!currentInvestigationId) {
+            showNotification('No investigation loaded', 'error');
+            return;
+        }
+        
+        // Add wallet to investigation
+        fetch(`/api/investigations/${currentInvestigationId}/wallets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: address, role: 'related' })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showNotification(data.error, 'warning');
+            } else {
+                showNotification(`Added ${address.substring(0, 10)}... to investigation`, 'success');
+            }
+        })
+        .catch(err => showNotification('Error: ' + err.message, 'error'));
+    }
+    
     // Load graph data from GraphQL API
     async function loadGraph() {
         const chain = document.getElementById('chain-select').value;
-        const symbol = document.getElementById('symbol-select').value;
+        const symbol = document.getElementById('token-select').value;
         const limit = document.getElementById('limit-select').value;
+        const minValue = document.getElementById('min-value').value || 0;
         
-        showNotification('Loading transaction graph via GraphQL...', 'info');
+        if (!symbol) {
+            showNotification('Please select a token first', 'warning');
+            return;
+        }
+        
+        showNotification(`Loading ${symbol.toUpperCase()} transfers on ${chain}...`, 'info');
         
         try {
             // Call our REST endpoint which internally uses GraphQL
@@ -193,15 +404,30 @@
             edges.clear();
             
             if (data.nodes && data.nodes.length > 0) {
-                nodes.add(data.nodes);
-                edges.add(data.edges);
+                // Filter by minimum value if specified
+                let filteredEdges = data.edges;
+                let filteredNodes = data.nodes;
+                
+                if (parseFloat(minValue) > 0) {
+                    filteredEdges = data.edges.filter(e => e.value >= parseFloat(minValue));
+                    const connectedNodeIds = new Set();
+                    filteredEdges.forEach(e => {
+                        connectedNodeIds.add(e.from);
+                        connectedNodeIds.add(e.to);
+                    });
+                    filteredNodes = data.nodes.filter(n => connectedNodeIds.has(n.id));
+                }
+                
+                nodes.add(filteredNodes);
+                edges.add(filteredEdges);
                 
                 // Update stats
-                document.getElementById('node-count').textContent = data.stats.unique_wallets;
-                document.getElementById('edge-count').textContent = data.stats.total_transfers;
-                document.getElementById('graph-volume').textContent = data.stats.total_volume.toLocaleString() + ' ' + symbol.toUpperCase();
+                document.getElementById('node-count').textContent = filteredNodes.length;
+                document.getElementById('edge-count').textContent = filteredEdges.length;
+                const totalVolume = filteredEdges.reduce((sum, e) => sum + (e.value || 0), 0);
+                document.getElementById('graph-volume').textContent = totalVolume.toLocaleString() + ' ' + symbol.toUpperCase();
                 
-                showNotification(`Loaded ${data.stats.total_transfers} transfers from ${data.stats.unique_wallets} wallets`, 'success');
+                showNotification(`Loaded ${filteredEdges.length} transfers from ${filteredNodes.length} wallets`, 'success');
             } else {
                 showNotification('No transfer data found. Try fetching data first via Admin panel.', 'warning');
             }
@@ -216,25 +442,55 @@
         const node = nodes.get(nodeId);
         const detailsDiv = document.getElementById('node-details');
         const infoDiv = document.getElementById('node-info');
+        const chain = document.getElementById('chain-select').value;
+        
+        // Get explorer URL based on chain
+        const explorers = {
+            'ETH': 'https://etherscan.io',
+            'POL': 'https://polygonscan.com',
+            'BSC': 'https://bscscan.com',
+            'BASE': 'https://basescan.org',
+            'ARB': 'https://arbiscan.io',
+            'OP': 'https://optimistic.etherscan.io',
+            'AVAX': 'https://snowtrace.io',
+            'FTM': 'https://ftmscan.com'
+        };
+        const explorerUrl = explorers[chain] || 'https://etherscan.io';
         
         const connectedEdges = network.getConnectedEdges(nodeId);
         const incomingTxs = connectedEdges.filter(edgeId => {
             const edge = edges.get(edgeId);
-            return edge.to === nodeId;
+            return edge && edge.to === nodeId;
         });
         const outgoingTxs = connectedEdges.filter(edgeId => {
             const edge = edges.get(edgeId);
-            return edge.from === nodeId;
+            return edge && edge.from === nodeId;
         });
+        
+        // Calculate volumes
+        let inVolume = 0, outVolume = 0;
+        incomingTxs.forEach(edgeId => {
+            const edge = edges.get(edgeId);
+            if (edge) inVolume += edge.value || 0;
+        });
+        outgoingTxs.forEach(edgeId => {
+            const edge = edges.get(edgeId);
+            if (edge) outVolume += edge.value || 0;
+        });
+        
+        const token = document.getElementById('token-select').value.toUpperCase() || 'TOKEN';
         
         infoDiv.innerHTML = `
             <p><strong>Address:</strong> <code>${nodeId}</code></p>
-            <p><strong>Incoming:</strong> ${incomingTxs.length} transactions</p>
-            <p><strong>Outgoing:</strong> ${outgoingTxs.length} transactions</p>
-            <p><strong>Total Connections:</strong> ${connectedEdges.length}</p>
+            <p><strong>Incoming:</strong> ${incomingTxs.length} txs (${inVolume.toFixed(2)} ${token})</p>
+            <p><strong>Outgoing:</strong> ${outgoingTxs.length} txs (${outVolume.toFixed(2)} ${token})</p>
+            <p><strong>Net Flow:</strong> ${(inVolume - outVolume).toFixed(2)} ${token}</p>
             <p class="mt-md">
-                <a href="https://polygonscan.com/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">
+                <a href="${explorerUrl}/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">
                     View on Explorer
+                </a>
+                <a href="/investigations?address=${nodeId}&chain=${chain}" class="btn btn-primary btn-sm">
+                    Investigate
                 </a>
             </p>
         `;
@@ -243,12 +499,15 @@
     }
     
     function exportGraph() {
+        const chain = document.getElementById('chain-select').value;
+        const symbol = document.getElementById('token-select').value || 'unknown';
+        
         const exportData = {
             nodes: nodes.get(),
             edges: edges.get(),
             metadata: {
-                chain: document.getElementById('chain-select').value,
-                symbol: document.getElementById('symbol-select').value,
+                chain: chain,
+                symbol: symbol,
                 exportedAt: new Date().toISOString()
             }
         };
@@ -257,18 +516,319 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `bubble-graph-${exportData.metadata.chain}-${exportData.metadata.symbol}.json`;
+        a.download = `bubble-graph-${chain}-${symbol}.json`;
         a.click();
         URL.revokeObjectURL(url);
         
         showNotification('Graph exported successfully', 'success');
     }
     
+    // Load available tokens from API
+    async function loadTokens() {
+        try {
+            const response = await fetch('/api/tokens/list');
+            const data = await response.json();
+            
+            const tokenSelect = document.getElementById('token-select');
+            tokenSelect.innerHTML = '';
+            
+            if (data.tokens && data.tokens.length > 0) {
+                // Add "Select token" option
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = '-- Select Token --';
+                tokenSelect.appendChild(defaultOption);
+                
+                // Group tokens by chain
+                const tokensByChain = {};
+                data.tokens.forEach(token => {
+                    const chain = token.trigram || 'OTHER';
+                    if (!tokensByChain[chain]) tokensByChain[chain] = [];
+                    tokensByChain[chain].push(token);
+                });
+                
+                // Add tokens grouped by chain
+                Object.keys(tokensByChain).sort().forEach(chain => {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = chain;
+                    
+                    tokensByChain[chain].forEach(token => {
+                        const option = document.createElement('option');
+                        option.value = token.symbol.toLowerCase();
+                        option.textContent = `${token.symbol} - ${token.name || token.symbol}`;
+                        optgroup.appendChild(option);
+                    });
+                    
+                    tokenSelect.appendChild(optgroup);
+                });
+            } else {
+                // Fallback to common tokens
+                const fallbackTokens = ['USDT', 'USDC', 'WETH', 'DAI', 'LINK'];
+                fallbackTokens.forEach(symbol => {
+                    const option = document.createElement('option');
+                    option.value = symbol.toLowerCase();
+                    option.textContent = symbol;
+                    tokenSelect.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load tokens:', error);
+            // Fallback
+            const tokenSelect = document.getElementById('token-select');
+            tokenSelect.innerHTML = '<option value="usdt">USDT</option><option value="usdc">USDC</option><option value="weth">WETH</option>';
+        }
+    }
+    
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
         initGraph();
-        // Auto-load graph on page load
-        setTimeout(loadGraph, 500);
+        loadTokens();  // Load available tokens from API
+        
+        // Check if we're in investigation mode
+        const investigationId = {{ investigation_id|default('null') }};
+        if (investigationId) {
+            loadInvestigationGraph(investigationId);
+        }
     });
+    
+    // Store raw graph data for filtering
+    let rawGraphData = null;
+    let currentInvestigationId = null;
+    
+    function formatVolume(num) {
+        if (num === null || num === undefined || isNaN(num)) return '0';
+        if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+        if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+        if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+        if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+        return num.toFixed(2);
+    }
+    
+    async function loadInvestigationGraph(investigationId) {
+        currentInvestigationId = investigationId;
+        
+        try {
+            // First, get investigation details
+            const invResponse = await fetch(`/api/investigations/${investigationId}`);
+            const invData = await invResponse.json();
+            
+            if (invData.error) {
+                showNotification('Investigation not found', 'error');
+                return;
+            }
+            
+            // Update header with investigation info
+            const titleEl = document.getElementById('inv-title');
+            const subtitleEl = document.getElementById('inv-subtitle');
+            if (titleEl) {
+                titleEl.textContent = invData.name || `Investigation #${investigationId}`;
+            }
+            if (subtitleEl) {
+                const walletCount = invData.wallets ? invData.wallets.length : 0;
+                const tokenCount = invData.tokens ? invData.tokens.length : 0;
+                subtitleEl.textContent = `${walletCount} wallets • ${tokenCount} tokens tracked`;
+            }
+            
+            // Now load the graph data
+            const graphResponse = await fetch(`/api/investigations/${investigationId}/graph?include_external=true`);
+            const graphData = await graphResponse.json();
+            
+            if (graphData.error) {
+                showNotification('Error loading graph: ' + graphData.error, 'error');
+                return;
+            }
+            
+            // Store raw data for filtering
+            rawGraphData = graphData;
+            
+            // Populate filter dropdowns
+            populateFilters(graphData);
+            
+            // Render the graph
+            renderInvestigationGraph(graphData);
+            
+        } catch (error) {
+            console.error('Error loading investigation graph:', error);
+            showNotification('Failed to load graph: ' + error.message, 'error');
+        }
+    }
+    
+    function populateFilters(graphData) {
+        // Get unique tokens and chains from edges
+        const tokens = new Set();
+        const chains = new Set();
+        
+        graphData.edges.forEach(e => {
+            if (e.token) tokens.add(e.token);
+            if (e.chain) chains.add(e.chain);
+        });
+        
+        // Populate token filter
+        const tokenFilter = document.getElementById('inv-token-filter');
+        if (tokenFilter) {
+            tokenFilter.innerHTML = '<option value="all">All Tokens</option>';
+            Array.from(tokens).sort().forEach(token => {
+                const opt = document.createElement('option');
+                opt.value = token;
+                opt.textContent = token;
+                tokenFilter.appendChild(opt);
+            });
+        }
+        
+        // Populate chain filter
+        const chainFilter = document.getElementById('inv-chain-filter');
+        if (chainFilter) {
+            chainFilter.innerHTML = '<option value="all">All Chains</option>';
+            Array.from(chains).sort().forEach(chain => {
+                const opt = document.createElement('option');
+                opt.value = chain;
+                opt.textContent = chain;
+                chainFilter.appendChild(opt);
+            });
+        }
+    }
+    
+    function applyInvestigationFilters() {
+        if (!rawGraphData) return;
+        
+        const minValue = parseFloat(document.getElementById('inv-min-value')?.value || 0);
+        const tokenFilter = document.getElementById('inv-token-filter')?.value || 'all';
+        const chainFilter = document.getElementById('inv-chain-filter')?.value || 'all';
+        
+        // Filter edges
+        let filteredEdges = rawGraphData.edges.filter(e => {
+            if (minValue > 0 && (e.value || 0) < minValue) return false;
+            if (tokenFilter !== 'all' && e.token !== tokenFilter) return false;
+            if (chainFilter !== 'all' && e.chain !== chainFilter) return false;
+            return true;
+        });
+        
+        // Get connected nodes
+        const connectedNodeIds = new Set();
+        filteredEdges.forEach(e => {
+            connectedNodeIds.add(e.from);
+            connectedNodeIds.add(e.to);
+        });
+        
+        const filteredNodes = rawGraphData.nodes.filter(n => connectedNodeIds.has(n.id));
+        
+        // Render filtered graph
+        renderInvestigationGraph({
+            nodes: filteredNodes,
+            edges: filteredEdges
+        });
+        
+        showNotification(`Filtered: ${filteredEdges.length} transfers, ${filteredNodes.length} wallets`, 'info');
+    }
+    
+    function resetInvestigationFilters() {
+        document.getElementById('inv-min-value').value = 0;
+        document.getElementById('inv-token-filter').value = 'all';
+        if (document.getElementById('inv-chain-filter')) {
+            document.getElementById('inv-chain-filter').value = 'all';
+        }
+        
+        if (rawGraphData) {
+            renderInvestigationGraph(rawGraphData);
+            showNotification('Filters reset', 'info');
+        }
+    }
+    
+    function renderInvestigationGraph(graphData) {
+        // Clear existing
+        nodes.clear();
+        edges.clear();
+        
+        if (!graphData.nodes || graphData.nodes.length === 0) {
+            showNotification('No transfer data. Run "Sync Transfers" first.', 'warning');
+            return;
+        }
+        
+        // Calculate volume per node for sizing
+        const nodeVolume = {};
+        graphData.edges.forEach(e => {
+            const val = e.value || 0;
+            nodeVolume[e.from] = (nodeVolume[e.from] || 0) + val;
+            nodeVolume[e.to] = (nodeVolume[e.to] || 0) + val;
+        });
+        
+        // Find max volume for scaling
+        const maxVolume = Math.max(...Object.values(nodeVolume), 1);
+        const highVolumeThreshold = maxVolume * 0.1; // Top 10% is "high volume"
+        
+        // Transform nodes for vis.js with better coloring
+        const visNodes = graphData.nodes.map(n => {
+            const vol = nodeVolume[n.id] || 0;
+            const isHighVolume = vol > highVolumeThreshold;
+            
+            // Color logic: case wallet = red, high volume = orange, external = blue
+            let color = '#00d4ff'; // external
+            if (n.is_case_wallet) {
+                color = '#ff6b6b'; // case wallet
+            } else if (isHighVolume) {
+                color = '#f59e0b'; // high volume
+            }
+            
+            // Size based on volume (log scale)
+            const size = 15 + Math.log10(Math.max(vol, 1)) * 3;
+            
+            return {
+                id: n.id,
+                label: n.label,
+                color: {
+                    background: color,
+                    border: n.is_case_wallet ? '#ff0000' : '#333',
+                    highlight: { background: color, border: '#fff' }
+                },
+                size: Math.min(size, 50),
+                borderWidth: n.is_case_wallet ? 3 : 1,
+                title: `${n.id}\nVolume: ${formatVolume(vol)}`
+            };
+        });
+        
+        // Transform edges with proper arrows and colors
+        const visEdges = graphData.edges.map(e => {
+            const val = e.value || 0;
+            // Edge width based on value (log scale)
+            const width = 1 + Math.log10(Math.max(val, 1)) * 0.5;
+            
+            return {
+                id: e.id,
+                from: e.from,
+                to: e.to,
+                width: Math.min(width, 8),
+                arrows: {
+                    to: { enabled: true, scaleFactor: 0.5, type: 'arrow' }
+                },
+                title: `${formatVolume(val)} ${e.token || ''}\nTx: ${e.hash?.substring(0, 10)}...`,
+                color: { 
+                    color: 'rgba(150, 150, 150, 0.6)',
+                    highlight: '#00d4ff',
+                    hover: '#00d4ff'
+                },
+                smooth: { type: 'curvedCW', roundness: 0.2 }
+            };
+        });
+        
+        nodes.add(visNodes);
+        edges.add(visEdges);
+        
+        // Update stats with proper formatting
+        document.getElementById('node-count').textContent = visNodes.length;
+        document.getElementById('edge-count').textContent = visEdges.length;
+        
+        const totalVolume = graphData.edges.reduce((sum, e) => sum + (e.value || 0), 0);
+        document.getElementById('graph-volume').textContent = formatVolume(totalVolume);
+        document.getElementById('data-source').textContent = 'Investigation Transfers';
+        
+        showNotification(`Loaded ${visEdges.length} transfers from ${visNodes.length} wallets`, 'success');
+        
+        // Fit the network to view all nodes
+        setTimeout(() => {
+            if (network) {
+                network.fit({ animation: { duration: 500 } });
+            }
+        }, 500);
+    }
 </script>
 {% endblock %}

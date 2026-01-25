@@ -3,7 +3,6 @@
 {% block title %}Investigation #{{ investigation_id }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vis-network@9/dist/dist/vis-network.min.css">
 <style>
     .page-header {
         display: flex;
@@ -107,11 +106,18 @@
     }
     
     /* Graph visualization */
-    #walletGraph {
-        height: 400px;
+    .graph-embed {
         border: 1px solid var(--border);
         border-radius: 8px;
+        overflow: hidden;
         background: var(--bg-primary);
+    }
+
+    .graph-embed iframe {
+        width: 100%;
+        height: 520px;
+        border: 0;
+        display: block;
     }
     
     /* Wallets table */
@@ -394,12 +400,21 @@
 <!-- Graph Tab -->
 <div class="tab-content active" id="tab-graph">
     <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="gap: 1rem; flex-wrap: wrap;">
             <span class="card-title">Wallet Flow Graph</span>
             <span id="graphStatus" style="color: var(--text-secondary); font-size: 0.875rem;"></span>
+            <div id="graphRange" style="display: none; gap: 0.5rem; align-items: center; margin-left: auto;">
+                <label style="font-size: 0.75rem; color: var(--text-secondary);">From</label>
+                <input type="date" id="graphFrom" style="padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg); color: var(--text-primary);">
+                <label style="font-size: 0.75rem; color: var(--text-secondary);">To</label>
+                <input type="date" id="graphTo" style="padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg); color: var(--text-primary);">
+                <button class="btn" onclick="applyGraphRange()">Apply</button>
+            </div>
         </div>
         <div class="card-body">
-            <div id="walletGraph"></div>
+            <div class="graph-embed">
+                <iframe id="visualizeFrame" title="Transaction Flow Graph" src="/visualize"></iframe>
+            </div>
         </div>
     </div>
 </div>
@@ -528,11 +543,10 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/vis-network@9/dist/vis-network.min.js"></script>
 <script>
     const investigationId = {{ investigation_id }};
     let investigationData = null;
-    let network = null;
+    let graphData = null;
     
     document.addEventListener('DOMContentLoaded', () => {
         loadInvestigation();
@@ -569,70 +583,70 @@
             : '-';
         
         // Render components
-        renderGraph();
         renderWallets();
         renderTokens();
-        renderTimeline();
+        loadGraphData();
+    }
+
+    async function loadGraphData() {
+        try {
+            const response = await fetch(`/api/investigations/${investigationId}/graph`);
+            if (!response.ok) throw new Error('Failed to load graph data');
+            graphData = await response.json();
+            renderGraph();
+            renderTimeline();
+        } catch (error) {
+            console.error('Error loading graph:', error);
+            renderGraph();
+            renderTimeline();
+        }
     }
     
     function renderGraph() {
-        const wallets = investigationData.wallets || [];
-        
-        if (wallets.length === 0) {
-            document.getElementById('walletGraph').innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">No wallets to visualize</p>';
+        const statusEl = document.getElementById('graphStatus');
+        const frame = document.getElementById('visualizeFrame');
+        if (frame && !frame.dataset.loaded) {
+            frame.src = '/visualize';
+            frame.dataset.loaded = 'true';
+        }
+
+        if (!graphData || !graphData.stats) {
+            statusEl.textContent = 'Visualization loaded';
+            document.getElementById('graphRange').style.display = 'none';
             return;
         }
-        
-        // Create nodes
-        const nodes = wallets.map(w => ({
-            id: w.address,
-            label: w.address.substring(0, 8) + '...',
-            title: `${w.address}\nRole: ${w.role}\nDepth: ${w.depth}`,
-            color: getRoleColor(w.role),
-            shape: w.role === 'victim' ? 'diamond' : 'dot',
-            size: w.role === 'victim' ? 30 : 20
-        }));
-        
-        // Create edges from parent relationships
-        const edges = wallets
-            .filter(w => w.parent_address)
-            .map(w => ({
-                from: w.parent_address,
-                to: w.address,
-                arrows: 'to',
-                label: w.total_received > 0 ? (w.total_received / 1e18).toFixed(2) : ''
-            }));
-        
-        const container = document.getElementById('walletGraph');
-        const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
-        
-        const options = {
-            layout: { hierarchical: { direction: 'LR', sortMethod: 'directed' } },
-            physics: { enabled: false },
-            interaction: { hover: true },
-            nodes: { font: { size: 12 } }
-        };
-        
-        network = new vis.Network(container, data, options);
-        document.getElementById('graphStatus').textContent = `${nodes.length} wallets, ${edges.length} flows`;
-        
-        network.on('click', (params) => {
-            if (params.nodes.length > 0) {
-                const address = params.nodes[0];
-                showWalletDetails(address);
-            }
-        });
+
+        const totalTransfers = graphData.stats.total_transfers || 0;
+        const uniqueWallets = graphData.stats.unique_wallets || 0;
+        const message = graphData && graphData.message ? ` • ${graphData.message}` : '';
+        statusEl.textContent = `${totalTransfers} transfers, ${uniqueWallets} wallets${message}`;
+        initGraphRange();
     }
-    
-    function getRoleColor(role) {
-        const colors = {
-            'victim': '#ef4444',
-            'related': '#6b7280',
-            'exchange': '#22c55e',
-            'bridge': '#8b5cf6',
-            'mixer': '#f59e0b'
-        };
-        return colors[role] || '#6b7280';
+
+    function initGraphRange() {
+        if (!graphData || !graphData.stats || !graphData.stats.min_timestamp || !graphData.stats.max_timestamp) {
+            document.getElementById('graphRange').style.display = 'none';
+            return;
+        }
+        const minDate = new Date(graphData.stats.min_timestamp * 1000);
+        const maxDate = new Date(graphData.stats.max_timestamp * 1000);
+        const fromInput = document.getElementById('graphFrom');
+        const toInput = document.getElementById('graphTo');
+        fromInput.value = minDate.toISOString().split('T')[0];
+        toInput.value = maxDate.toISOString().split('T')[0];
+        document.getElementById('graphRange').style.display = 'flex';
+    }
+
+    function applyGraphRange() {
+        if (!graphData || !graphData.edges) return;
+        const fromVal = document.getElementById('graphFrom').value;
+        const toVal = document.getElementById('graphTo').value;
+        if (!fromVal || !toVal) return;
+        const fromTs = new Date(fromVal).getTime() / 1000;
+        const toTs = new Date(toVal).getTime() / 1000 + 86399;
+        graphData.filtered_edges = graphData.edges.filter(e => e.timestamp && e.timestamp >= fromTs && e.timestamp <= toTs);
+        renderGraph();
+        renderTimeline();
     }
     
     function renderWallets() {
@@ -694,21 +708,40 @@
     function renderTimeline() {
         const inv = investigationData;
         const timeline = document.getElementById('timelineBody');
+        const events = [];
         
-        const events = [
-            { time: inv.created_at, content: 'Investigation created', type: 'create' }
-        ];
-        
-        if (inv.incident_date) {
-            events.unshift({ time: inv.incident_date, content: 'Incident reported', type: 'incident' });
+        if (graphData && graphData.events && graphData.events.length > 0) {
+            const filtered = graphData.filtered_edges || graphData.edges;
+            const byHash = new Map();
+            for (const e of graphData.events) {
+                if (!e.timestamp) continue;
+                if (filtered.find(f => f.hash === e.hash)) {
+                    byHash.set(e.hash, e);
+                }
+            }
+            const flowEvents = Array.from(byHash.values()).sort((a, b) => a.timestamp - b.timestamp);
+            flowEvents.forEach(e => {
+                events.push({
+                    time: new Date(e.timestamp * 1000).toISOString(),
+                    content: `${e.token || ''} transfer ${e.from.substring(0, 6)}... → ${e.to.substring(0, 6)}...`
+                });
+            });
+        } else {
+            events.push({ time: inv.created_at, content: 'Investigation created' });
+            if (inv.incident_date) {
+                events.unshift({ time: inv.incident_date, content: 'Incident reported' });
+            }
+            if (inv.updated_at && inv.updated_at !== inv.created_at) {
+                events.push({ time: inv.updated_at, content: 'Last updated' });
+            }
         }
         
-        if (inv.updated_at && inv.updated_at !== inv.created_at) {
-            events.push({ time: inv.updated_at, content: 'Last updated', type: 'update' });
+        if (events.length === 0) {
+            timeline.innerHTML = '<p style="color:var(--text-secondary);">No timeline events</p>';
+            return;
         }
         
         events.sort((a, b) => new Date(a.time) - new Date(b.time));
-        
         timeline.innerHTML = events.map(e => `
             <div class="timeline-item">
                 <div class="timeline-time">${new Date(e.time).toLocaleString()}</div>

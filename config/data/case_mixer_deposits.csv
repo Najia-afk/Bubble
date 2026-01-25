@@ -1,0 +1,4 @@
+case_id,mixer_protocol,chain_code,amount,usd_value,tx_hash,timestamp
+CASE-2026-003,tornado_cash,ETH,330 ETH,1000000,,2026-01-24
+CASE-2026-005,tornado_cash,BSC,1140 BNB,1040000,,2026-01-25
+CASE-2026-005,tornado_cash,ETH,346.8 ETH,1050000,,2026-01-25

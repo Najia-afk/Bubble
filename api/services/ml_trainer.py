@@ -165,50 +165,121 @@ class WalletMLTrainer:
         
         return X, y
     
-    def _extract_features_from_db(self, session, address: str, chain_trigram: str) -> Dict:
-        """Extract wallet features from transaction tables."""
-        from sqlalchemy import text
+    def _extract_features_from_db(
+        self, session, address: str, chain_trigram: str, token_symbol: str = None
+    ) -> Dict:
+        """
+        Extract wallet features from transaction tables.
+        Supports ANY token on ANY EVM chain - no hardcoded token references.
         
-        # Try GHST table as default (can be expanded)
-        table_name = f"ghst_{chain_trigram.lower()}_erc20_transfer_event"
+        Args:
+            session: SQLAlchemy session
+            address: Wallet address to extract features for
+            chain_trigram: Chain identifier (ETH, POL, BSC, BASE, ARB, OP, AVAX, FTM)
+            token_symbol: Optional token symbol to filter transfers (None = all tokens)
+        """
+        from sqlalchemy import text
+        from api.application.erc20models import Token
+        
+        # Discover available transfer tables dynamically
+        # Pattern: {symbol}_{chain}_erc20_transfer_event
+        available_tables = []
         
         try:
-            # Outgoing transactions
-            out_query = text(f"""
-                SELECT COUNT(*) as tx_count, 
-                       COUNT(DISTINCT to_contract_address) as unique_to,
-                       AVG(value) as avg_value,
-                       MAX(value) as max_value,
-                       SUM(value) as total_out
-                FROM {table_name}
-                WHERE LOWER(from_contract_address) = :addr
-            """)
-            out_result = session.execute(out_query, {'addr': address.lower()}).fetchone()
+            # Get all tokens for this chain
+            tokens = session.query(Token).filter(
+                Token.trigram == chain_trigram.upper()
+            ).all()
             
-            # Incoming transactions
-            in_query = text(f"""
-                SELECT COUNT(*) as tx_count,
-                       COUNT(DISTINCT from_contract_address) as unique_from,
-                       SUM(value) as total_in
-                FROM {table_name}
-                WHERE LOWER(to_contract_address) = :addr
-            """)
-            in_result = session.execute(in_query, {'addr': address.lower()}).fetchone()
-            
-            out_count = out_result[0] or 0
-            in_count = in_result[0] or 0
-            
-            return {
-                'tx_count': out_count + in_count,
-                'unique_counterparties': (out_result[1] or 0) + (in_result[1] or 0),
-                'avg_tx_value': float(out_result[2] or 0) / 1e18,
-                'max_tx_value': float(out_result[3] or 0) / 1e18,
-                'in_out_ratio': (in_count / out_count) if out_count > 0 else 1.0,
-                'total_volume': (float(out_result[4] or 0) + float(in_result[2] or 0)) / 1e18,
-            }
+            for token in tokens:
+                if token_symbol and token.symbol.lower() != token_symbol.lower():
+                    continue
+                table_name = f"{token.symbol.lower()}_{chain_trigram.lower()}_erc20_transfer_event"
+                # Check if table exists
+                check_query = text("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = :table_name
+                    )
+                """)
+                exists = session.execute(check_query, {'table_name': table_name}).scalar()
+                if exists:
+                    available_tables.append(table_name)
         except Exception as e:
-            logger.debug(f"Feature extraction failed for {address}: {e}")
+            logger.debug(f"Table discovery failed: {e}")
+        
+        if not available_tables:
+            logger.debug(f"No transfer tables found for chain {chain_trigram}")
             return {}
+        
+        # Aggregate features across all available token tables
+        total_out_count = 0
+        total_in_count = 0
+        total_unique_to = set()
+        total_unique_from = set()
+        total_values = []
+        total_out_volume = 0.0
+        total_in_volume = 0.0
+        
+        for table_name in available_tables:
+            try:
+                # Outgoing transactions
+                out_query = text(f"""
+                    SELECT COUNT(*) as tx_count, 
+                           ARRAY_AGG(DISTINCT to_contract_address) as unique_to,
+                           AVG(value) as avg_value,
+                           MAX(value) as max_value,
+                           SUM(value) as total_out
+                    FROM {table_name}
+                    WHERE LOWER(from_contract_address) = :addr
+                """)
+                out_result = session.execute(out_query, {'addr': address.lower()}).fetchone()
+                
+                # Incoming transactions
+                in_query = text(f"""
+                    SELECT COUNT(*) as tx_count,
+                           ARRAY_AGG(DISTINCT from_contract_address) as unique_from,
+                           SUM(value) as total_in
+                    FROM {table_name}
+                    WHERE LOWER(to_contract_address) = :addr
+                """)
+                in_result = session.execute(in_query, {'addr': address.lower()}).fetchone()
+                
+                total_out_count += out_result[0] or 0
+                total_in_count += in_result[0] or 0
+                
+                if out_result[1]:
+                    total_unique_to.update([a for a in out_result[1] if a])
+                if in_result[1]:
+                    total_unique_from.update([a for a in in_result[1] if a])
+                    
+                if out_result[2]:
+                    total_values.append(float(out_result[2]))
+                if out_result[3]:
+                    total_values.append(float(out_result[3]))
+                    
+                total_out_volume += float(out_result[4] or 0)
+                total_in_volume += float(in_result[2] or 0)
+                
+            except Exception as e:
+                logger.debug(f"Feature extraction from {table_name} failed: {e}")
+                continue
+        
+        if total_out_count + total_in_count == 0:
+            return {}
+        
+        return {
+            'tx_count': total_out_count + total_in_count,
+            'unique_counterparties': len(total_unique_to) + len(total_unique_from),
+            'avg_tx_value': (sum(total_values) / len(total_values) / 1e18) if total_values else 0,
+            'max_tx_value': (max(total_values) / 1e18) if total_values else 0,
+            'in_out_ratio': (total_in_count / total_out_count) if total_out_count > 0 else 1.0,
+            'total_volume': (total_out_volume + total_in_volume) / 1e18,
+            'out_count': total_out_count,
+            'in_count': total_in_count,
+            'unique_senders': len(total_unique_from),
+            'unique_receivers': len(total_unique_to),
+        }
     
     def train_model(
         self, 

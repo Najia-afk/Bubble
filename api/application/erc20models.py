@@ -113,6 +113,7 @@ class Investigation(Base):
     # Relationships
     wallets = relationship("InvestigationWallet", back_populates="investigation", cascade="all, delete-orphan")
     tokens = relationship("InvestigationToken", back_populates="investigation", cascade="all, delete-orphan")
+    transfers = relationship("InvestigationTransfer", back_populates="investigation", cascade="all, delete-orphan")
 
 
 class InvestigationWallet(Base):
@@ -158,6 +159,36 @@ class InvestigationToken(Base):
     
     __table_args__ = (
         UniqueConstraint('investigation_id', 'contract_address', 'chain_id', name='investigation_token_unique'),
+    )
+
+
+class InvestigationTransfer(Base):
+    """Token transfers involving investigation wallets."""
+    __tablename__ = 'investigation_transfer'
+    
+    id = Column(Integer, primary_key=True)
+    investigation_id = Column(Integer, ForeignKey('investigation.id', ondelete='CASCADE'), nullable=False, index=True)
+    chain_id = Column(Integer, nullable=False, default=1)
+    chain_code = Column(String(10), nullable=False)
+    tx_hash = Column(String(66), nullable=False, index=True)
+    block_number = Column(BigInteger)
+    timestamp = Column(TIMESTAMP, index=True)
+    from_address = Column(String(42), nullable=False, index=True)
+    to_address = Column(String(42), nullable=False, index=True)
+    token_symbol = Column(String(64))
+    token_contract = Column(String(42))
+    value = Column(Float)
+    value_raw = Column(String(78))
+    token_decimals = Column(Integer)
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+    
+    investigation = relationship("Investigation", back_populates="transfers")
+    
+    __table_args__ = (
+        UniqueConstraint(
+            'investigation_id', 'chain_id', 'tx_hash', 'from_address', 'to_address', 'token_contract',
+            name='investigation_transfer_unique'
+        ),
     )
 
 

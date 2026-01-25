@@ -3,7 +3,6 @@
 # Copyright (c) 2025-2026 All Rights Reserved.
 # =============================================================================
 
-#app.py
 from flask import Flask, g, jsonify, request, render_template
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
@@ -17,28 +16,22 @@ import os
 
 SessionFactory = get_session_factory()
 
-# Swagger UI configuration
 SWAGGER_URL = '/api/docs'
 API_URL = '/static/swagger.json'
 
 def create_app():
-    # Setup session factory
     app = Flask(__name__, 
                 template_folder='templates',
                 static_folder='static')
     
-    # Load configuration
     app.config.from_object(Config)
     app_config = get_config()
     app.config.update(app_config)
     
-    # Enable CORS
     CORS(app)
     
-    # Register Swagger UI blueprint
     swaggerui_blueprint = get_swaggerui_blueprint(
-        SWAGGER_URL,
-        API_URL,
+        SWAGGER_URL, API_URL,
         config={
             'app_name': "Bubble API",
             'layout': "BaseLayout",
@@ -51,32 +44,55 @@ def create_app():
     
     app_logger = setup_logging('application.log')
 
-    def initialize_dynamic_models():
-        """Initialize dynamic models using a session."""
+    def initialize_database():
+        """Initialize database with core models and CSV data."""
+        from api.application.models import Base as CoreBase
+        from scripts.init_db import DatabaseInitializer
+        
         session = SessionFactory()
         try:
+            engine = session.get_bind()
+            
+            # Create core tables from models.py
+            CoreBase.metadata.create_all(engine)
+            app_logger.info("Core tables created")
+            
+            # Create legacy tables from erc20models
+            erc20models.Base.metadata.create_all(engine)
+            app_logger.info("Legacy tables created")
+            
+            # Load CSV data if not already done
+            try:
+                initializer = DatabaseInitializer(str(engine.url))
+                initializer.init_all(force=False)
+                app_logger.info("CSV data loaded")
+            except Exception as e:
+                app_logger.warning(f"CSV init skipped: {e}")
+            
+            # Generate dynamic ERC20 models
             erc20models.generate_block_transfer_event_classes(session)
             erc20models.generate_erc20_classes(session)
             session.commit()
+            app_logger.info("Database initialization complete")
         except Exception as e:
             session.rollback()
-            app_logger.error(f"Error during model initialization: {e}")
+            app_logger.error(f"Database initialization error: {e}")
+            import traceback
+            app_logger.error(traceback.format_exc())
         finally:
             SessionFactory.remove()
 
-    initialize_dynamic_models()
+    initialize_database()
 
     @app.before_request
     def before_request():
-        """Attach a new session to the application context at the beginning of each request."""
         if not hasattr(g, 'db_session'):
             g.db_session = SessionFactory()
 
     @app.teardown_request
     def teardown_request(exception=None):
-        """Close and remove the session at the end of each request."""
         db_session = g.pop('db_session', None)
-        if db_session is not None:
+        if db_session:
             db_session.close()
     
     @app.route('/health')
@@ -103,19 +119,25 @@ def create_app():
         """Visualization page"""
         return render_template('visualizations/transaction_flow.html')
     
+    @app.route('/graph')
+    def graph_page():
+        """Full graph visualization - can load investigation data via query params"""
+        investigation_id = request.args.get('investigation_id')
+        return render_template('visualizations/transaction_flow.html', investigation_id=investigation_id)
+    
     # ========================================================================
     # INVESTIGATION & ML PAGES
     # ========================================================================
     
     @app.route('/investigations')
     def investigations_page():
-        """Investigations list page"""
-        return render_template('investigations.html')
+        """Redirect to Cases page"""
+        return redirect('/cases')
     
     @app.route('/investigations/<int:investigation_id>')
     def investigation_detail_page(investigation_id):
-        """Investigation detail page"""
-        return render_template('investigation_detail.html', investigation_id=investigation_id)
+        """Redirect to full graph page"""
+        return redirect(f'/graph?investigation_id={investigation_id}')
     
     @app.route('/classify')
     def classify_page():
@@ -131,17 +153,27 @@ def create_app():
     def audit_page():
         """Audit trail page for compliance"""
         return render_template('audit.html')
+    
+    @app.route('/cases')
+    def cases_page():
+        """Cases management page - external investigations"""
+        return render_template('cases.html')
+    
+    @app.route('/monitor')
+    def monitor_page():
+        """Real-time wallet monitoring page"""
+        return render_template('monitor.html')
 
     @app.errorhandler(Exception)
     def handle_exception(e):
-        """Handle uncaught exceptions."""
         app_logger.error(f"Unhandled exception: {e}")
-
         return jsonify(error=str(e)), 500
 
-    # Import and initialize your routes after app creation to avoid circular imports
+    # Register API routes
     from api.routes import init_api_routes
     from datetime import datetime
+    
+    # Single API surface
     init_api_routes(app)
     
     # Setup GraphQL endpoint (manual - no flask-graphql needed)
@@ -155,19 +187,25 @@ def create_app():
             return '''<!DOCTYPE html>
 <html>
 <head>
-    <title>Bubble GraphQL</title>
-    <link href="https://unpkg.com/graphiql/graphiql.min.css" rel="stylesheet" />
+    <title>Bubble GraphQL Explorer</title>
+    <style>
+        body { margin: 0; height: 100vh; }
+        #graphiql { height: 100vh; }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/graphiql@3.0.6/graphiql.min.css" />
 </head>
-<body style="margin: 0;">
-    <div id="graphiql" style="height: 100vh;"></div>
-    <script crossorigin src="https://unpkg.com/react/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom/umd/react-dom.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/graphiql/graphiql.min.js"></script>
+<body>
+    <div id="graphiql">Loading GraphiQL...</div>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/graphiql@3.0.6/graphiql.min.js" crossorigin></script>
     <script>
-        const fetcher = GraphiQL.createFetcher({ url: '/graphql' });
-        ReactDOM.render(
-            React.createElement(GraphiQL, { fetcher: fetcher }),
-            document.getElementById('graphiql'),
+        const root = ReactDOM.createRoot(document.getElementById('graphiql'));
+        root.render(
+            React.createElement(GraphiQL, {
+                fetcher: GraphiQL.createFetcher({ url: '/graphql' }),
+                defaultEditorToolsVisibility: true,
+            })
         );
     </script>
 </body>

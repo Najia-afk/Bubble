@@ -1,0 +1,16 @@
+address,chain_code,protocol,name,pool_size,is_active
+0x47CE0C6eD5B0Ce3d3A51fdb1C52DC66a7c3c2936,ETH,tornado_cash,Tornado Cash 0.1 ETH,0.1 ETH,true
+0x910Cbd523D972eb0a6f4cAe4618aD62622b39DbF,ETH,tornado_cash,Tornado Cash 10 ETH,10 ETH,true
+0xA160cdAB225685dA1d56aa342Ad8841c3b53f291,ETH,tornado_cash,Tornado Cash 100 ETH,100 ETH,true
+0xD4B88Df4D29F5CedD6857912842cff3b20C8Cfa3,ETH,tornado_cash,Tornado Cash 1000 DAI,1000 DAI,true
+0x169AD27A470D064DEDE56a2D3ff727986b15D52B,BSC,tornado_cash,Tornado Cash 0.1 BNB,0.1 BNB,true
+0x84443CFd09A48AF6eF360C6976C5392aC5023a1F,BSC,tornado_cash,Tornado Cash 1 BNB,1 BNB,true
+0x330bdFADE01eE9bF63C209Ee33102DD334618e0a,BSC,tornado_cash,Tornado Cash 10 BNB,10 BNB,true
+0x1E34A77868E19A6647b1f2F47B51ed72dEDE95DD,BSC,tornado_cash,Tornado Cash 100 BNB,100 BNB,true
+0x1E34A77868E19A6647b1f2F47B51ed72dEDE95DD,POL,tornado_cash,Tornado Cash MATIC,MATIC,true
+0x0D5550d52428E7e3175bfc9550207e4ad3859b17,ARB,tornado_cash,Tornado Cash ARB,ARB,true
+0xFA7093CDD9EE6932B4eb2c9e1cde7CE00B1FA4b9,OP,tornado_cash,Tornado Cash OP,OP,true
+0x0C5fC098F96D92cDE92C4c0D9CAaf6c567dCA0d7,ETH,railgun,Railgun ETH,multi,true
+0x19B620929f97b7b990801496c3b361CA5dEf8C71,POL,railgun,Railgun Polygon,multi,true
+0x88E7D0C2e40e0574D3D7e86BC7ac7b6E8d0f3f23,BSC,railgun,Railgun BSC,multi,true
+0xD89Bf2e6Cc7C76e96Dd1A84a38B0af42A8D90Dbb,ARB,railgun,Railgun ARB,multi,true

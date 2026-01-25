@@ -1,0 +1,9 @@
+code,name,chain_id,native_token,native_decimals,explorer_name,explorer_api_url,explorer_api_key_env,explorer_rate_limit,block_time_seconds,confirmations_required,is_active
+ETH,Ethereum,1,ETH,18,Etherscan,https://api.etherscan.io/v2/api,ETHERSCAN_API_KEY,5,12.0,12,true
+POL,Polygon,137,MATIC,18,Polygonscan,https://api.polygonscan.com/api,POLYGONSCAN_API_KEY,5,2.0,128,true
+BSC,BNB Smart Chain,56,BNB,18,BscScan,https://api.bscscan.com/api,BSCSCAN_API_KEY,5,3.0,15,true
+BASE,Base,8453,ETH,18,Basescan,https://api.basescan.org/api,BASESCAN_API_KEY,5,2.0,12,true
+ARB,Arbitrum One,42161,ETH,18,Arbiscan,https://api.arbiscan.io/api,ARBISCAN_API_KEY,5,0.25,64,true
+OP,Optimism,10,ETH,18,Optimistic Etherscan,https://api-optimistic.etherscan.io/api,OPTIMISM_API_KEY,5,2.0,12,true
+AVAX,Avalanche C-Chain,43114,AVAX,18,Snowtrace,https://api.snowtrace.io/api,SNOWTRACE_API_KEY,5,2.0,12,true
+FTM,Fantom,250,FTM,18,FTMScan,https://api.ftmscan.com/api,FTMSCAN_API_KEY,5,1.0,12,true

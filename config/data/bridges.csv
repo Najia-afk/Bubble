@@ -1,0 +1,17 @@
+address,chain_code,protocol,name,direction,is_active
+0x8315177aB297bA92A06054cE80a67Ed4DBd7ed3a,ETH,arbitrum,Arbitrum Bridge,ETH->ARB,true
+0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1,ETH,optimism,Optimism Gateway,ETH->OP,true
+0x3c2269811836af69497E5F486A85D7316753cf62,ETH,stargate,Stargate Router,multi,true
+0x45A01E4e04F14f7A4a6702c74187c5F6222033cd,ETH,stargate,Stargate Bridge,multi,true
+0x2796317b0fF8538F253012862c06787Adfb8cEb6,ARB,stargate,Stargate ARB,multi,true
+0x9d1B1669c73b033DFe47ae5a0164Ab96df25B944,OP,stargate,Stargate OP,multi,true
+0xA0c68C638235ee32657e8f720a23ceC1bFc77C77,POL,polygon_bridge,Polygon Bridge,ETH->POL,true
+0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf,ETH,polygon_bridge,Polygon Bridge ETH,ETH->POL,true
+0x0BaB3F242D60D8Fb63eCfC0F66fd5c8d55F64Ff8,BSC,wormhole,Wormhole BSC,multi,true
+0x98f3c9e6E3fAce36bAAd05FE09d375Ef1464288B,ETH,wormhole,Wormhole ETH,multi,true
+0x3ee18B2214AFF97000D974cf647E7C347E8fa585,ETH,wormhole,Wormhole Token Bridge,multi,true
+0x4200000000000000000000000000000000000010,OP,optimism,OP Standard Bridge,ETH->OP,true
+0x4200000000000000000000000000000000000010,BASE,base,Base Standard Bridge,ETH->BASE,true
+0xC840838Bc438d73C16c2f8b22D2Ce3669963cD48,BSC,multichain,Multichain BSC,multi,true
+0xe4eDb277e41dc89aB076a1F049f4a3EfA700bCE8,ARB,arbitrum,Arbitrum One Gateway,ETH->ARB,true
+0x8EB8a3b98659Cce290402893d0123abb75E3ab28,ETH,avalanche_bridge,Avalanche Bridge,ETH->AVAX,true

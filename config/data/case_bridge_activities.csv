@@ -1,0 +1,2 @@
+case_id,from_chain,to_chain,bridge_protocol,amount_usd,tx_hash,timestamp
+CASE-2026-005,BSC,ETH,unknown,2100000,,2026-01-25

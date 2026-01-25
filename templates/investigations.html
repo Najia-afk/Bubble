@@ -373,7 +373,7 @@
             <th>Status</th>
             <th>Wallets</th>
             <th>Tokens</th>
-            <th>Reported Loss</th>
+            <th>Estimated Loss</th>
             <th>Created</th>
             <th>Actions</th>
         </tr>
@@ -491,7 +491,10 @@
         const total = allInvestigations.length;
         const open = allInvestigations.filter(i => i.status === 'open').length;
         const inProgress = allInvestigations.filter(i => i.status === 'in_progress').length;
-        const totalLoss = allInvestigations.reduce((sum, i) => sum + (i.reported_loss_usd || 0), 0);
+        const totalLoss = allInvestigations.reduce(
+            (sum, i) => sum + ((i.estimated_loss_usd ?? i.reported_loss_usd) || 0),
+            0
+        );
         
         document.getElementById('totalCases').textContent = total;
         document.getElementById('openCases').textContent = open;
@@ -529,7 +532,7 @@
                 <td><span class="status-badge ${inv.status}">${inv.status.replace('_', ' ')}</span></td>
                 <td><span class="wallet-count">👛 ${inv.wallet_count || 0}</span></td>
                 <td><span class="wallet-count">🪙 ${inv.token_count || 0}</span></td>
-                <td>${inv.reported_loss_usd ? '$' + inv.reported_loss_usd.toLocaleString() : '-'}</td>
+                <td>${(inv.estimated_loss_usd ?? inv.reported_loss_usd) ? '$' + (inv.estimated_loss_usd ?? inv.reported_loss_usd).toLocaleString() : '-'}</td>
                 <td><small>${new Date(inv.created_at).toLocaleDateString()}</small></td>
                 <td>
                     <a href="/investigations/${inv.id}" class="action-btn">View</a>

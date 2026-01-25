@@ -1,0 +1,985 @@
+{% extends "base.html" %}
+
+{% block title %}Real-time Monitoring{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+        text-align: center;
+    }
+    
+    .stat-card h4 {
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+    }
+    
+    .stat-card .value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .stat-card .value.danger { color: var(--danger); }
+    .stat-card .value.warning { color: var(--warning); }
+    .stat-card .value.success { color: var(--success); }
+    
+    .panel {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+    }
+    
+    .panel-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .panel-title {
+        font-size: 1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .panel-body {
+        padding: 1.25rem;
+    }
+    
+    .alert-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .alert-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 1rem;
+        border-bottom: 1px solid var(--border);
+        transition: background 0.2s;
+    }
+    
+    .alert-item:hover {
+        background: var(--bg-hover);
+    }
+    
+    .alert-item:last-child {
+        border-bottom: none;
+    }
+    
+    .alert-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+    
+    .alert-icon.incoming { background: rgba(34, 197, 94, 0.1); }
+    .alert-icon.outgoing { background: rgba(59, 130, 246, 0.1); }
+    .alert-icon.mixer { background: rgba(239, 68, 68, 0.1); }
+    .alert-icon.bridge { background: rgba(139, 92, 246, 0.1); }
+    .alert-icon.large_transfer { background: rgba(245, 158, 11, 0.1); }
+    
+    .alert-content {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .alert-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .alert-details {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    
+    .alert-meta {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+    
+    .alert-time {
+        text-align: right;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+    }
+    
+    .risk-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.675rem;
+        font-weight: 600;
+    }
+    
+    .risk-badge.high { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .risk-badge.medium { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+    .risk-badge.low { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    
+    .wallet-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1rem;
+    }
+    
+    .wallet-card {
+        background: var(--bg-secondary);
+        border-radius: 8px;
+        padding: 1rem;
+        position: relative;
+    }
+    
+    .wallet-address {
+        font-family: var(--font-mono);
+        font-size: 0.875rem;
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+    }
+    
+    .remove-wallet-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 1rem;
+        padding: 0.25rem;
+        border-radius: 4px;
+        opacity: 0.5;
+        transition: all 0.2s;
+    }
+    
+    .remove-wallet-btn:hover {
+        opacity: 1;
+        background: var(--error);
+        color: white;
+    }
+    
+    .wallet-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+    
+    .chain-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.125rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.675rem;
+        font-weight: 600;
+        background: var(--bg-tertiary);
+    }
+    
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+    }
+    
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+    }
+    
+    .btn-secondary {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+    }
+    
+    .btn-sm {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.75rem;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: var(--text-secondary);
+    }
+    
+    .live-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.75rem;
+        color: var(--success);
+    }
+    
+    .live-indicator::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        background: var(--success);
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+    }
+    
+    @media (max-width: 1024px) {
+        .grid-2 {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">📡 Real-time Monitoring</h1>
+        <p class="page-subtitle">Track wallet activity across all chains • Instant alerts on fund movements</p>
+    </div>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <span class="live-indicator">Live</span>
+        <button class="btn btn-secondary" onclick="refreshAll()">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+            </svg>
+            Refresh
+        </button>
+        <button class="btn btn-primary" onclick="triggerCheck()">
+            Check Now
+        </button>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <h4>Monitored Wallets</h4>
+        <div class="value" id="statWallets">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>Total Alerts (24h)</h4>
+        <div class="value" id="statAlerts">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>High Risk Alerts</h4>
+        <div class="value danger" id="statHighRisk">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>Mixer Detections</h4>
+        <div class="value warning" id="statMixer">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>Bridge Activity</h4>
+        <div class="value" id="statBridge">-</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <!-- Recent Alerts -->
+    <div class="panel">
+        <div class="panel-header">
+            <h3 class="panel-title">🚨 Recent Alerts</h3>
+            <select id="alertFilter" onchange="loadAlerts()" class="btn-secondary btn-sm">
+                <option value="">All Types</option>
+                <option value="mixer">Mixer</option>
+                <option value="bridge">Bridge</option>
+                <option value="large_transfer">Large Transfer</option>
+                <option value="incoming">Incoming</option>
+                <option value="outgoing">Outgoing</option>
+            </select>
+        </div>
+        <div class="panel-body">
+            <div class="alert-list" id="alertList">
+                <div class="empty-state">Loading alerts...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Monitored Wallets -->
+    <div class="panel">
+        <div class="panel-header">
+            <h3 class="panel-title">👛 Monitored Wallets</h3>
+            <button class="btn btn-primary btn-sm" onclick="openAddWalletModal()">+ Add Wallet</button>
+        </div>
+        <div class="panel-body">
+            <div class="wallet-grid" id="walletGrid">
+                <div class="empty-state">Loading wallets...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Suspect Wallets from Investigations -->
+<div class="panel" style="margin-top: 1.5rem;">
+    <div class="panel-header">
+        <h3 class="panel-title">🎭 Suspect Wallets from Investigations</h3>
+        <button class="btn btn-secondary btn-sm" onclick="loadSuspects()">↻ Refresh</button>
+    </div>
+    <div class="panel-body">
+        <div class="suspect-table" id="suspectTable">
+            <div class="empty-state">Loading suspect wallets...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Wallet Modal -->
+<div class="modal-overlay" id="addWalletModal">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3 class="modal-title">Add Wallet to Monitor</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form onsubmit="addWallet(event)">
+            <div class="form-group">
+                <label>Wallet Address</label>
+                <input type="text" id="walletAddress" placeholder="0x..." required>
+            </div>
+            <div class="form-group">
+                <label>Chain</label>
+                <select id="walletChain">
+                    <option value="ETH">Ethereum</option>
+                    <option value="POL">Polygon</option>
+                    <option value="BSC">BNB Chain</option>
+                    <option value="BASE">Base</option>
+                    <option value="ARB">Arbitrum</option>
+                    <option value="OP">Optimism</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Label (optional)</label>
+                <input type="text" id="walletLabel" placeholder="e.g., Theft wallet #1">
+            </div>
+            <div class="form-group">
+                <label>Case ID (optional)</label>
+                <input type="text" id="walletCaseId" placeholder="e.g., CASE-2026-001">
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add to Monitoring</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let refreshInterval;
+    
+    async function loadStats() {
+        try {
+            const response = await fetch('/api/monitor/stats');
+            const stats = await response.json();
+            
+            document.getElementById('statWallets').textContent = stats.monitored_wallets || 0;
+            document.getElementById('statAlerts').textContent = stats.total_alerts || 0;
+            document.getElementById('statHighRisk').textContent = stats.high_risk_alerts || 0;
+            document.getElementById('statMixer').textContent = stats.alerts_by_type?.mixer || 0;
+            document.getElementById('statBridge').textContent = stats.alerts_by_type?.bridge || 0;
+        } catch (error) {
+            console.error('Failed to load stats:', error);
+        }
+    }
+    
+    async function loadSuspects() {
+        try {
+            const response = await fetch('/api/monitor/suspects');
+            const data = await response.json();
+            
+            const table = document.getElementById('suspectTable');
+            
+            if (!data.suspects || data.suspects.length === 0) {
+                table.innerHTML = '<div class="empty-state">No suspect wallets found in investigations.</div>';
+                return;
+            }
+            
+            // Update stat
+            document.getElementById('statWallets').textContent = data.suspects.length;
+            
+            table.innerHTML = `
+                <div class="suspect-header">
+                    <div>Address</div>
+                    <div>Investigation</div>
+                    <div>Role</div>
+                    <div>Last Outflow</div>
+                    <div>Destination</div>
+                    <div>Outflows</div>
+                    <div>Actions</div>
+                </div>
+                ${data.suspects.map(s => `
+                    <div class="suspect-row">
+                        <div class="suspect-address">
+                            <span class="chain-badge ${s.chain}">${s.chain}</span>
+                            <code>${s.address.slice(0, 8)}...${s.address.slice(-6)}</code>
+                            ${s.label ? `<span class="suspect-label">${s.label}</span>` : ''}
+                        </div>
+                        <div class="suspect-inv">
+                            <a href="/graph?investigation_id=${s.investigation_id}">${s.investigation_name || 'Investigation #' + s.investigation_id}</a>
+                        </div>
+                        <div>
+                            <span class="role-badge ${s.role}">${s.role}</span>
+                        </div>
+                        <div class="suspect-time">
+                            ${s.last_out_time ? formatTimeAgo(s.last_out_time) : '<span class="no-activity">No outflow</span>'}
+                            ${s.last_out_value ? `<br><small>${s.last_out_value.toFixed(4)} ${s.last_out_token || ''}</small>` : ''}
+                        </div>
+                        <div class="suspect-dest">
+                            ${s.last_out_to ? `<code>${s.last_out_to.slice(0, 8)}...${s.last_out_to.slice(-4)}</code>` : '-'}
+                        </div>
+                        <div class="suspect-stats">
+                            <span title="Total outflows">${s.total_outflows} txs</span>
+                            <span title="Unique destinations">${s.unique_destinations} dests</span>
+                        </div>
+                        <div class="suspect-actions">
+                            <a href="https://etherscan.io/address/${s.address}" target="_blank" class="action-link" title="View on Etherscan">🔍</a>
+                            <button onclick="addToMonitor('${s.address}', '${s.chain}')" class="action-link" title="Add to active monitoring">➕</button>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+            
+        } catch (error) {
+            console.error('Failed to load suspects:', error);
+            document.getElementById('suspectTable').innerHTML = '<div class="empty-state">Failed to load suspect wallets.</div>';
+        }
+    }
+    
+    function formatTimeAgo(timestamp) {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = (now - date) / 1000;
+        
+        if (diff < 60) return 'Just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+        return date.toLocaleDateString();
+    }
+    
+    async function addToMonitor(address, chain) {
+        try {
+            const response = await fetch('/api/monitor/wallets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address, chain })
+            });
+            if (response.ok) {
+                showNotification('Added to active monitoring', 'success');
+                loadWallets();
+            }
+        } catch (error) {
+            showNotification('Failed to add to monitoring', 'error');
+        }
+    }
+    
+    async function loadAlerts() {
+        try {
+            const filter = document.getElementById('alertFilter').value;
+            const url = filter ? `/api/monitor/alerts?type=${filter}&limit=50` : '/api/monitor/alerts?limit=50';
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            const alertList = document.getElementById('alertList');
+            
+            if (!data.alerts || data.alerts.length === 0) {
+                alertList.innerHTML = '<div class="empty-state">No alerts yet. Add wallets to start monitoring.</div>';
+                return;
+            }
+            
+            alertList.innerHTML = data.alerts.map(alert => `
+                <div class="alert-item">
+                    <div class="alert-icon ${alert.alert_type}">
+                        ${getAlertIcon(alert.alert_type)}
+                    </div>
+                    <div class="alert-content">
+                        <div class="alert-title">
+                            ${formatAlertType(alert.alert_type)} - ${alert.amount.toFixed(4)} ${alert.token}
+                            ${alert.risk_score >= 0.7 ? '<span class="risk-badge high">HIGH RISK</span>' : 
+                              alert.risk_score >= 0.4 ? '<span class="risk-badge medium">MEDIUM</span>' : ''}
+                        </div>
+                        <div class="alert-details">
+                            ${alert.alert_type === 'incoming' ? 'From' : 'To'}: 
+                            <code>${alert.counterparty.slice(0, 10)}...${alert.counterparty.slice(-6)}</code>
+                        </div>
+                        <div class="alert-meta">
+                            <span>🔗 ${alert.chain}</span>
+                            ${alert.case_id ? `<span>📁 ${alert.case_id}</span>` : ''}
+                            ${alert.notes ? `<span>📝 ${alert.notes}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="alert-time">
+                        ${formatTime(alert.timestamp)}
+                    </div>
+                </div>
+            `).join('');
+            
+        } catch (error) {
+            console.error('Failed to load alerts:', error);
+        }
+    }
+    
+    async function loadWallets() {
+        try {
+            const response = await fetch('/api/monitor/wallets');
+            const data = await response.json();
+            
+            const walletGrid = document.getElementById('walletGrid');
+            
+            if (!data.wallets || data.wallets.length === 0) {
+                walletGrid.innerHTML = '<div class="empty-state">No wallets being monitored. Add some to get started!</div>';
+                return;
+            }
+            
+            walletGrid.innerHTML = data.wallets.map(wallet => `
+                <div class="wallet-card" data-address="${wallet.address}" data-chain="${wallet.chain}">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div class="wallet-address">
+                            ${wallet.address.slice(0, 10)}...${wallet.address.slice(-8)}
+                        </div>
+                        <button class="remove-wallet-btn" onclick="removeWallet('${wallet.address}', '${wallet.chain}')" title="Remove from monitoring">✕</button>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <span class="chain-badge">${wallet.chain}</span>
+                        ${wallet.case_id ? `<span style="font-size: 0.675rem; color: var(--text-muted);">${wallet.case_id}</span>` : ''}
+                    </div>
+                    ${wallet.label ? `<div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${wallet.label}</div>` : ''}
+                    <div class="wallet-meta">
+                        <span>🔔 ${wallet.alert_count} alerts</span>
+                        <span>📥 ${wallet.total_in.toFixed(2)} / 📤 ${wallet.total_out.toFixed(2)}</span>
+                    </div>
+                </div>
+            `).join('');
+            
+        } catch (error) {
+            console.error('Failed to load wallets:', error);
+        }
+    }
+    
+    function getAlertIcon(type) {
+        const icons = {
+            'incoming': '📥',
+            'outgoing': '📤',
+            'mixer': '🌀',
+            'bridge': '🌉',
+            'large_transfer': '💰'
+        };
+        return icons[type] || '⚠️';
+    }
+    
+    function formatAlertType(type) {
+        const labels = {
+            'incoming': 'Incoming Transfer',
+            'outgoing': 'Outgoing Transfer',
+            'mixer': 'Mixer Deposit',
+            'bridge': 'Bridge Transfer',
+            'large_transfer': 'Large Transfer'
+        };
+        return labels[type] || type;
+    }
+    
+    function formatTime(timestamp) {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = (now - date) / 1000; // seconds
+        
+        if (diff < 60) return 'Just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return date.toLocaleDateString();
+    }
+    
+    async function triggerCheck() {
+        try {
+            const response = await fetch('/api/monitor/check', { method: 'POST' });
+            const data = await response.json();
+            showNotification(`Activity check started: ${data.task_id}`, 'info');
+            
+            // Refresh after a delay
+            setTimeout(() => {
+                refreshAll();
+            }, 5000);
+        } catch (error) {
+            showNotification('Failed to trigger check', 'error');
+        }
+    }
+    
+    function openAddWalletModal() {
+        document.getElementById('addWalletModal').classList.add('active');
+    }
+    
+    function closeModal() {
+        document.getElementById('addWalletModal').classList.remove('active');
+    }
+    
+    async function addWallet(event) {
+        event.preventDefault();
+        
+        const address = document.getElementById('walletAddress').value;
+        const chain = document.getElementById('walletChain').value;
+        const label = document.getElementById('walletLabel').value;
+        const caseId = document.getElementById('walletCaseId').value;
+        
+        try {
+            const response = await fetch('/api/monitor/wallets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    address: address,
+                    chain: chain,
+                    label: label,
+                    case_id: caseId || null
+                })
+            });
+            
+            if (response.ok) {
+                showNotification('Wallet added to monitoring', 'success');
+                closeModal();
+                loadWallets();
+                loadStats();
+                
+                // Clear form
+                document.getElementById('walletAddress').value = '';
+                document.getElementById('walletLabel').value = '';
+                document.getElementById('walletCaseId').value = '';
+            } else {
+                const data = await response.json();
+                showNotification(`Error: ${data.error}`, 'error');
+            }
+        } catch (error) {
+            showNotification('Failed to add wallet', 'error');
+        }
+    }
+    
+    async function removeWallet(address, chain) {
+        if (!confirm(`Remove ${address.slice(0, 10)}...${address.slice(-6)} from monitoring?`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/monitor/wallets/${address}?chain=${chain}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                showNotification('Wallet removed from monitoring', 'success');
+                loadWallets();
+                loadStats();
+            } else {
+                const data = await response.json();
+                showNotification(`Error: ${data.error}`, 'error');
+            }
+        } catch (error) {
+            showNotification('Failed to remove wallet', 'error');
+        }
+    }
+    
+    function refreshAll() {
+        loadStats();
+        loadAlerts();
+        loadWallets();
+        loadSuspects();
+    }
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+        refreshAll();
+        
+        // Auto-refresh every 60 seconds (less frequent for suspects)
+        refreshInterval = setInterval(refreshAll, 60000);
+    });
+    
+    // Cleanup on page leave
+    window.addEventListener('beforeunload', function() {
+        if (refreshInterval) clearInterval(refreshInterval);
+    });
+</script>
+
+<style>
+    /* Suspect Table Styles */
+    .suspect-header {
+        display: grid;
+        grid-template-columns: 2fr 1.5fr 0.8fr 1.2fr 1.2fr 1fr 0.8fr;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        background: #0f0f1a;
+        border-radius: 8px 8px 0 0;
+        font-weight: 600;
+        font-size: 0.75rem;
+        color: #a1a1aa;
+        text-transform: uppercase;
+    }
+    
+    .suspect-row {
+        display: grid;
+        grid-template-columns: 2fr 1.5fr 0.8fr 1.2fr 1.2fr 1fr 0.8fr;
+        gap: 1rem;
+        padding: 0.875rem 1rem;
+        border-bottom: 1px solid #27272a;
+        align-items: center;
+        font-size: 0.875rem;
+    }
+    
+    .suspect-row:hover {
+        background: #1a1a2e;
+    }
+    
+    .suspect-row:last-child {
+        border-bottom: none;
+    }
+    
+    .suspect-address {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .suspect-address code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+    }
+    
+    .suspect-label {
+        font-size: 0.7rem;
+        color: #71717a;
+        background: #27272a;
+        padding: 0.15rem 0.4rem;
+        border-radius: 4px;
+    }
+    
+    .suspect-inv a {
+        color: #00d4ff;
+        text-decoration: none;
+        font-size: 0.8rem;
+    }
+    
+    .suspect-inv a:hover {
+        text-decoration: underline;
+    }
+    
+    .role-badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .role-badge.suspect, .role-badge.attacker, .role-badge.hacker {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+    }
+    
+    .role-badge.thief, .role-badge.scammer {
+        background: rgba(245, 158, 11, 0.2);
+        color: #f59e0b;
+    }
+    
+    .suspect-time {
+        font-size: 0.8rem;
+        color: #b4b4c0;
+    }
+    
+    .suspect-time .no-activity {
+        color: #71717a;
+        font-style: italic;
+    }
+    
+    .suspect-dest code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        color: #a1a1aa;
+    }
+    
+    .suspect-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        font-size: 0.75rem;
+        color: #8888a0;
+    }
+    
+    .suspect-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .action-link {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+        padding: 0.25rem;
+    }
+    
+    .action-link:hover {
+        opacity: 1;
+    }
+    
+    .chain-badge {
+        font-size: 0.65rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+    
+    .chain-badge.ETH { background: #627eea; color: white; }
+    .chain-badge.POL { background: #8247e5; color: white; }
+    .chain-badge.BSC { background: #f3ba2f; color: #1a1a2e; }
+    .chain-badge.BASE { background: #0052ff; color: white; }
+    .chain-badge.ARB { background: #28a0f0; color: white; }
+    .chain-badge.OP { background: #ff0420; color: white; }
+
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(4px);
+    }
+    
+    .modal-overlay.active {
+        display: flex;
+    }
+    
+    .modal {
+        background: #1a1a2e;
+        border: 1px solid #3f3f46;
+        border-radius: 12px;
+        padding: 1.5rem;
+        width: 90%;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid #3f3f46;
+        padding-bottom: 1rem;
+    }
+    
+    .modal-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #ffffff;
+    }
+    
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #a1a1aa;
+        transition: color 0.2s;
+    }
+    
+    .modal-close:hover {
+        color: #ffffff;
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: #ffffff;
+    }
+    
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #3f3f46;
+        border-radius: 6px;
+        background: #0f0f1a;
+        color: #ffffff;
+        font-size: 1rem;
+    }
+    
+    .form-group input::placeholder {
+        color: #71717a;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: #00d4ff;
+        box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid #3f3f46;
+    }
+</style>
+{% endblock %}

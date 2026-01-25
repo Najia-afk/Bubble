@@ -22,22 +22,26 @@
     --info: #3b82f6;
     --info-light: #dbeafe;
     
-    /* Dark Theme Colors */
+    /* Dark Theme Colors - Improved Contrast */
     --bg-dark: #0a0a0f;
     --bg-darker: #050508;
-    --bg-card: #12121a;
-    --bg-card-hover: #1a1a25;
-    --bg-input: #1e1e2a;
+    --bg-card: #1a1a2e;
+    --bg-card-hover: #242438;
+    --bg-input: #0f0f1a;
+    --card-bg: #1a1a2e;
+    --bg-primary: #0f0f1a;
+    --bg-secondary: #12121c;
     
-    /* Text Colors */
+    /* Text Colors - Higher Contrast */
     --text-primary: #ffffff;
-    --text-secondary: #a1a1aa;
-    --text-muted: #71717a;
+    --text-secondary: #b4b4c0;
+    --text-muted: #8888a0;
     --text-inverse: #ffffff;
     
-    /* Border Colors */
-    --border-dark: #27272a;
-    --border-light: #3f3f46;
+    /* Border Colors - More Visible */
+    --border: #3f3f46;
+    --border-dark: #3f3f46;
+    --border-light: #52525b;
     --border-accent: rgba(0, 212, 255, 0.3);
     
     /* Header */
