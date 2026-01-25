@@ -4,13 +4,13 @@ Syncs data from PostgreSQL to TigerGraph
 """
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 from sqlalchemy import text
 
 from cypher_app.utils.tigergraph_client import get_tg_client
 from utils.database import get_session_factory
 from utils.logging_config import setup_logging
-from api.application.erc20models import Token, TokenPriceHistory
+from api.application.erc20models import Token, TokenPriceHistory, WalletLabel, KnownBridge, CHAIN_ID_TO_TRIGRAM, TRIGRAM_TO_CHAIN_ID
 
 logger = setup_logging('tigergraph_loader.log')
 
@@ -148,6 +148,14 @@ class TigerGraphLoader:
             wallets = set()
             wallet_vertices = []
             transfer_edges = []
+            bridge_edges = []
+            
+            # Load labels and bridges from PostgreSQL
+            chain_id = TRIGRAM_TO_CHAIN_ID.get(chain_trigram.upper(), 1)
+            wallet_labels_map = self._load_wallet_labels(session, chain_id)
+            known_bridges = self._load_known_bridges(session, chain_id)
+            
+            logger.info(f"Loaded {len(wallet_labels_map)} wallet labels and {len(known_bridges)} known bridges")
             
             for transfer in transfers:
                 from_addr = transfer.from_contract_address
@@ -170,9 +178,33 @@ class TigerGraphLoader:
                         'chain_trigram': chain_trigram.upper()
                     }
                 ))
+                
+                # Check if this is a bridge transaction
+                from_is_bridge = from_addr.lower() in known_bridges
+                to_is_bridge = to_addr.lower() in known_bridges
+                
+                if from_is_bridge or to_is_bridge:
+                    bridge_addr = from_addr.lower() if from_is_bridge else to_addr.lower()
+                    bridge_info = known_bridges.get(bridge_addr, {})
+                    
+                    bridge_edges.append({
+                        'from_wallet': from_addr,
+                        'to_wallet': to_addr,
+                        'bridge_address': bridge_addr,
+                        'protocol': bridge_info.get('protocol', 'unknown'),
+                        'direction': bridge_info.get('direction', 'unknown'),
+                        'tx_hash': transfer.tx_hash,
+                        'amount': float(transfer.value),
+                        'timestamp': transfer.timestamp,
+                        'chain_trigram': chain_trigram.upper()
+                    })
             
-            # Create wallet vertices
+            # Create wallet vertices with labels
             for addr in wallets:
+                addr_lower = addr.lower()
+                labels = wallet_labels_map.get(addr_lower, [])
+                is_bridge = addr_lower in known_bridges
+                
                 wallet_vertices.append((
                     addr,
                     {
@@ -180,8 +212,8 @@ class TigerGraphLoader:
                         'last_seen': datetime.now(),
                         'total_transactions': 0,
                         'total_volume_usd': 0.0,
-                        'is_contract': False,
-                        'labels': []
+                        'is_contract': is_bridge,  # Bridges are contracts
+                        'labels': labels
                     }
                 ))
             
@@ -194,6 +226,12 @@ class TigerGraphLoader:
             if transfer_edges:
                 self.tg.upsert_edges_bulk('Wallet', 'Transfer', 'Wallet', transfer_edges)
                 logger.info(f"✓ Loaded {len(transfer_edges)} transfers")
+            
+            # Log bridge transactions detected
+            if bridge_edges:
+                logger.info(f"✓ Detected {len(bridge_edges)} bridge transactions")
+                # TODO: Create Bridge edges in TigerGraph when schema supports it
+                # self.tg.upsert_edges_bulk('Wallet', 'Bridge', 'Wallet', bridge_edges)
             
             return True
             
@@ -225,6 +263,86 @@ class TigerGraphLoader:
             'BASE': 2.0
         }
         return times.get(trigram.upper(), 10.0)
+    
+    def _load_wallet_labels(self, session, chain_id: int) -> Dict[str, List[str]]:
+        """Load wallet labels from PostgreSQL for a specific chain"""
+        try:
+            labels = session.query(WalletLabel).filter(
+                WalletLabel.chain_id == chain_id
+            ).all()
+            
+            # Group labels by address
+            labels_map = {}
+            for label in labels:
+                addr = label.address.lower()
+                if addr not in labels_map:
+                    labels_map[addr] = []
+                
+                # Build label string with type if available
+                label_str = label.label
+                if label.label_type:
+                    label_str = f"{label.label_type}:{label.label}"
+                if label.is_trusted:
+                    label_str += ":trusted"
+                
+                labels_map[addr].append(label_str)
+            
+            return labels_map
+            
+        except Exception as e:
+            logger.warning(f"Could not load wallet labels: {e}")
+            return {}
+    
+    def _load_known_bridges(self, session, chain_id: int) -> Dict[str, Dict]:
+        """Load known bridge addresses from PostgreSQL for a specific chain"""
+        try:
+            bridges = session.query(KnownBridge).filter(
+                KnownBridge.chain_id == chain_id,
+                KnownBridge.is_active == True
+            ).all()
+            
+            bridges_map = {}
+            for bridge in bridges:
+                bridges_map[bridge.address.lower()] = {
+                    'protocol': bridge.protocol,
+                    'direction': bridge.direction,
+                    'name': bridge.name
+                }
+            
+            return bridges_map
+            
+        except Exception as e:
+            logger.warning(f"Could not load known bridges: {e}")
+            return {}
+    
+    def get_wallet_labels(self, address: str, chain_trigram: str = None) -> List[Dict]:
+        """Get labels for a wallet address from PostgreSQL"""
+        session = self.session_factory()
+        try:
+            query = session.query(WalletLabel).filter(
+                WalletLabel.address == address.lower()
+            )
+            
+            if chain_trigram:
+                chain_id = TRIGRAM_TO_CHAIN_ID.get(chain_trigram.upper())
+                if chain_id:
+                    query = query.filter(WalletLabel.chain_id == chain_id)
+            
+            labels = query.all()
+            
+            return [
+                {
+                    'label': label.label,
+                    'label_type': label.label_type,
+                    'name_tag': label.name_tag,
+                    'source': label.source,
+                    'is_trusted': label.is_trusted,
+                    'chain': CHAIN_ID_TO_TRIGRAM.get(label.chain_id, 'UNKNOWN')
+                }
+                for label in labels
+            ]
+        finally:
+            session.close()
 
 
 # Global instance - Only create when TigerGraph is enabled

@@ -1,15 +1,332 @@
 #erc20models.py
 import logging
 import os
-from sqlalchemy import Column, Date, Float, String, TIMESTAMP, Integer, ForeignKey, BigInteger, UniqueConstraint, Index, inspect
+from sqlalchemy import Column, Date, Float, String, TIMESTAMP, Integer, ForeignKey, BigInteger, UniqueConstraint, Index, inspect, Boolean, Text
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.exc import ProgrammingError, IntegrityError
 from utils.logging_config import setup_logging
+from datetime import datetime
 
 erc20models_logger = setup_logging('erc20models.log')
 
 Base = declarative_base()
+
+
+# ============================================================================
+# LABEL SYSTEM MODELS
+# ============================================================================
+
+class LabelType(Base):
+    """Predefined label types for wallet classification"""
+    __tablename__ = 'label_type'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50), nullable=False, unique=True, index=True)  # e.g., 'exchange', 'bridge', 'mixer'
+    description = Column(String(255))
+    color = Column(String(7), default='#808080')  # Hex color for UI display
+    priority = Column(Integer, default=0)  # Higher priority labels shown first
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+    
+    # Relationship to wallet labels
+    wallet_labels = relationship("WalletLabel", back_populates="label_type_rel")
+
+
+class WalletLabel(Base):
+    """Labels assigned to wallet addresses (from API import or manual)"""
+    __tablename__ = 'wallet_label'
+    
+    id = Column(Integer, primary_key=True)
+    address = Column(String(42), nullable=False, index=True)  # Ethereum address
+    chain_id = Column(Integer, nullable=False, index=True)  # 1=ETH, 56=BSC, 137=POL, 8453=BASE
+    label = Column(String(100), nullable=False, index=True)  # e.g., 'Binance 14', 'Polygon Bridge'
+    label_type = Column(String(50), ForeignKey('label_type.name'), nullable=True, index=True)  # e.g., 'exchange', 'bridge'
+    name_tag = Column(String(255))  # Human readable name from etherscan
+    source = Column(String(20), nullable=False, default='manual')  # 'api', 'manual', 'ml'
+    confidence = Column(Float, default=1.0)  # ML confidence score (1.0 for manual/api)
+    is_trusted = Column(Boolean, default=False)  # Validated by analyst
+    validated_by = Column(String(100))  # Username who validated
+    validated_at = Column(TIMESTAMP)
+    notes = Column(Text)  # Analyst notes
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    label_type_rel = relationship("LabelType", back_populates="wallet_labels")
+    
+    __table_args__ = (
+        UniqueConstraint('address', 'chain_id', 'label', name='wallet_label_unique'),
+        Index('ix_wallet_label_address_chain', 'address', 'chain_id'),
+    )
+
+
+class KnownBridge(Base):
+    """Known bridge contract addresses for cross-chain tracking"""
+    __tablename__ = 'known_bridge'
+    
+    id = Column(Integer, primary_key=True)
+    address = Column(String(42), nullable=False, index=True)
+    chain_id = Column(Integer, nullable=False, index=True)
+    protocol = Column(String(50), nullable=False)  # e.g., 'polygon_bridge', 'wormhole', 'stargate'
+    direction = Column(String(20))  # e.g., 'ETH→POL', 'multi'
+    name = Column(String(100))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+    
+    __table_args__ = (
+        UniqueConstraint('address', 'chain_id', name='known_bridge_unique'),
+    )
+
+
+# Chain ID mapping helper
+CHAIN_ID_TO_TRIGRAM = {
+    1: 'ETH',
+    56: 'BSC',
+    137: 'POL',
+    8453: 'BASE',
+}
+
+TRIGRAM_TO_CHAIN_ID = {v: k for k, v in CHAIN_ID_TO_TRIGRAM.items()}
+
+
+# ============================================================================
+# INVESTIGATION MODELS (Forensic Case Management)
+# ============================================================================
+
+class Investigation(Base):
+    """Forensic investigation case - tracks hack/fraud incidents"""
+    __tablename__ = 'investigation'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text)
+    status = Column(String(20), default='open')  # 'open', 'in_progress', 'closed', 'archived'
+    incident_date = Column(TIMESTAMP)  # When the hack/fraud occurred
+    reported_loss_usd = Column(Float)  # Estimated loss in USD
+    created_by = Column(String(100))
+    assigned_to = Column(String(100))
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
+    closed_at = Column(TIMESTAMP)
+    notes = Column(Text)
+    
+    # Relationships
+    wallets = relationship("InvestigationWallet", back_populates="investigation", cascade="all, delete-orphan")
+    tokens = relationship("InvestigationToken", back_populates="investigation", cascade="all, delete-orphan")
+
+
+class InvestigationWallet(Base):
+    """Wallets linked to an investigation"""
+    __tablename__ = 'investigation_wallet'
+    
+    id = Column(Integer, primary_key=True)
+    investigation_id = Column(Integer, ForeignKey('investigation.id', ondelete='CASCADE'), nullable=False, index=True)
+    address = Column(String(42), nullable=False, index=True)
+    chain_id = Column(Integer, nullable=False, default=1)
+    role = Column(String(30), nullable=False, default='related')  # 'victim', 'attacker', 'related', 'exchange', 'bridge'
+    depth = Column(Integer, default=0)  # How many hops from original victim (0 = victim wallet)
+    parent_address = Column(String(42))  # Which wallet this was traced from
+    discovered_at = Column(TIMESTAMP, default=datetime.utcnow)
+    last_activity = Column(TIMESTAMP)
+    total_received = Column(Float, default=0.0)
+    total_sent = Column(Float, default=0.0)
+    is_flagged = Column(Boolean, default=False)  # Analyst flagged as important
+    notes = Column(Text)
+    
+    # Relationship
+    investigation = relationship("Investigation", back_populates="wallets")
+    
+    __table_args__ = (
+        UniqueConstraint('investigation_id', 'address', 'chain_id', name='investigation_wallet_unique'),
+        Index('ix_inv_wallet_address', 'address'),
+    )
+
+
+class InvestigationToken(Base):
+    """Tokens being tracked in an investigation"""
+    __tablename__ = 'investigation_token'
+    
+    id = Column(Integer, primary_key=True)
+    investigation_id = Column(Integer, ForeignKey('investigation.id', ondelete='CASCADE'), nullable=False, index=True)
+    contract_address = Column(String(42), nullable=False)
+    chain_id = Column(Integer, nullable=False, default=1)
+    symbol = Column(String(20))
+    stolen_amount = Column(Float)  # Amount stolen of this token
+    
+    # Relationship
+    investigation = relationship("Investigation", back_populates="tokens")
+    
+    __table_args__ = (
+        UniqueConstraint('investigation_id', 'contract_address', 'chain_id', name='investigation_token_unique'),
+    )
+
+
+# ============================================================================
+# WALLET SCORING (ML Classification Results)
+# ============================================================================
+
+class WalletScore(Base):
+    """ML-generated wallet classification scores"""
+    __tablename__ = 'wallet_score'
+    
+    id = Column(Integer, primary_key=True)
+    address = Column(String(42), nullable=False, index=True)
+    chain_id = Column(Integer, nullable=False, default=1)
+    
+    # Classification scores (0-1 probability for each type)
+    score_exchange = Column(Float, default=0.0)
+    score_bridge = Column(Float, default=0.0)
+    score_mixer = Column(Float, default=0.0)
+    score_defi = Column(Float, default=0.0)
+    score_whale = Column(Float, default=0.0)
+    score_bot = Column(Float, default=0.0)
+    
+    # Best prediction
+    predicted_type = Column(String(30))  # Highest scoring type
+    confidence = Column(Float)  # Score of predicted type
+    
+    # Clustering info
+    cluster_id = Column(Integer)  # K-means cluster assignment
+    is_anomaly = Column(Boolean, default=False)  # DBSCAN outlier detection
+    anomaly_score = Column(Float)  # Distance from cluster center
+    
+    # Feature values used for scoring (for explainability)
+    feature_tx_count = Column(Integer)
+    feature_unique_counterparties = Column(Integer)
+    feature_avg_tx_value = Column(Float)
+    feature_max_tx_value = Column(Float)
+    feature_in_out_ratio = Column(Float)  # incoming/outgoing tx ratio
+    feature_active_days = Column(Integer)
+    
+    # Metadata
+    model_version = Column(String(50))
+    scored_at = Column(TIMESTAMP, default=datetime.utcnow)
+    
+    __table_args__ = (
+        UniqueConstraint('address', 'chain_id', name='wallet_score_unique'),
+        Index('ix_wallet_score_address', 'address'),
+    )
+
+
+# ============================================================================
+# AUDIT TRAIL (AI Regulation Compliance)
+# ============================================================================
+
+class AuditLog(Base):
+    """
+    Audit trail for all system actions.
+    Required for AI regulation compliance (EU AI Act, etc.)
+    """
+    __tablename__ = 'audit_log'
+    
+    id = Column(Integer, primary_key=True)
+    
+    # Timestamp (first for sorting)
+    timestamp = Column(TIMESTAMP, default=datetime.utcnow)
+    
+    # Action metadata
+    action_type = Column(String(50), nullable=False)  # classification, investigation, validation, model, label, alert, report
+    action_subtype = Column(String(50))  # create, update, delete, predict, explain
+    
+    # Actor information
+    user_id = Column(String(100))  # User who performed action
+    user_role = Column(String(50))  # analyst, admin, system
+    ip_address = Column(String(45))  # IPv4/IPv6
+    
+    # Target information (wallet)
+    wallet_address = Column(String(42))  # For wallet-related actions
+    chain_id = Column(Integer)
+    
+    # Context
+    investigation_id = Column(Integer, ForeignKey('investigation.id'), nullable=True)
+    
+    # Classification result
+    predicted_type = Column(String(50))  # exchange, bridge, mixer, whale, etc.
+    confidence = Column(Float)  # Confidence score 0-1
+    
+    # Model information (for ML decisions)
+    model_version = Column(String(50))
+    mlflow_run_id = Column(String(100))  # MLflow run ID
+    
+    # SHAP explanation (for explainability)
+    shap_values = Column(JSON)  # SHAP feature contributions
+    
+    # Validation status
+    validation_status = Column(String(20), default='pending')  # pending, confirmed, rejected
+    validated_by = Column(String(100))
+    validated_at = Column(TIMESTAMP)
+    
+    # Notes
+    notes = Column(Text)
+    
+    # Timestamps
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('ix_audit_log_action_type', 'action_type'),
+        Index('ix_audit_log_timestamp', 'timestamp'),
+        Index('ix_audit_log_investigation', 'investigation_id'),
+        Index('ix_audit_log_wallet', 'wallet_address'),
+    )
+
+
+class ModelMetadata(Base):
+    """
+    Model metadata and configuration for production models.
+    Tracks model lifecycle and governance.
+    """
+    __tablename__ = 'model_metadata'
+    
+    id = Column(Integer, primary_key=True)
+    
+    # Model identification
+    model_name = Column(String(100), nullable=False)
+    version = Column(String(50), nullable=False)
+    model_type = Column(String(50))  # xgboost, random_forest, etc.
+    mlflow_run_id = Column(String(100))  # MLflow run ID
+    
+    # Status
+    is_production = Column(Boolean, default=False)
+    is_validated = Column(Boolean, default=False)
+    
+    # Performance metrics
+    accuracy = Column(Float)
+    f1_score = Column(Float)
+    precision = Column(Float)
+    recall = Column(Float)
+    roc_auc = Column(Float)
+    
+    # Training info
+    n_samples = Column(Integer)
+    n_features = Column(Integer)
+    feature_names = Column(JSON)  # List of features used
+    hyperparameters = Column(JSON)  # Model hyperparameters
+    
+    # SHAP feature importance
+    shap_importance = Column(JSON)  # Feature importance from SHAP
+    
+    # Decision threshold
+    threshold = Column(Float, default=0.5)
+    
+    # Governance
+    approved_by = Column(String(100))
+    approved_at = Column(TIMESTAMP)
+    review_notes = Column(Text)
+    
+    # Drift monitoring
+    last_drift_check = Column(TIMESTAMP)
+    drift_detected = Column(Boolean, default=False)
+    drift_score = Column(Float)
+    
+    # Timestamps
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        UniqueConstraint('model_name', 'version', name='model_metadata_unique'),
+        Index('ix_model_metadata_production', 'model_name', 'is_production'),
+    )
+
 
 class Token(Base):
     __tablename__ = 'token'

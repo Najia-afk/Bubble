@@ -1,0 +1,896 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Trail{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+    }
+    
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .page-subtitle {
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+    
+    .btn {
+        padding: 0.75rem 1.25rem;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+        font-size: 0.875rem;
+    }
+    
+    .btn:hover { background: var(--bg-hover); }
+    
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    
+    /* Filters */
+    .filters-bar {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+    
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .filter-group label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+    }
+    
+    .filter-group input,
+    .filter-group select {
+        padding: 0.625rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 0.875rem;
+        min-width: 160px;
+    }
+    
+    /* Stats */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+    }
+    
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+    }
+    
+    .stat-value.classifications { color: #8b5cf6; }
+    .stat-value.investigations { color: #3b82f6; }
+    .stat-value.validations { color: #22c55e; }
+    .stat-value.models { color: #f59e0b; }
+    .stat-value.alerts { color: #ef4444; }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    /* Audit Log Table */
+    .audit-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    .audit-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .audit-title {
+        font-weight: 600;
+        font-size: 1.125rem;
+    }
+    
+    .audit-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .audit-table th,
+    .audit-table td {
+        padding: 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .audit-table th {
+        background: var(--bg-secondary);
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+    }
+    
+    .audit-table tbody tr {
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    
+    .audit-table tbody tr:hover {
+        background: var(--bg-hover);
+    }
+    
+    .action-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .action-classification { background: #ede9fe; color: #6d28d9; }
+    .action-investigation { background: #dbeafe; color: #1d4ed8; }
+    .action-validation { background: #dcfce7; color: #166534; }
+    .action-model { background: #fef3c7; color: #92400e; }
+    .action-label { background: #e0e7ff; color: #3730a3; }
+    .action-alert { background: #fee2e2; color: #b91c1c; }
+    .action-report { background: #f3e8ff; color: #7e22ce; }
+    
+    .validation-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .validation-pending { background: var(--bg-secondary); color: var(--text-secondary); }
+    .validation-confirmed { background: #dcfce7; color: #166534; }
+    .validation-rejected { background: #fee2e2; color: #b91c1c; }
+    
+    .wallet-address {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+    }
+    
+    .timestamp {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+    
+    /* Pagination */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 1.25rem;
+        border-top: 1px solid var(--border);
+    }
+    
+    .page-btn {
+        padding: 0.5rem 0.875rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-secondary);
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+    
+    .page-btn:hover { background: var(--bg-hover); }
+    .page-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    /* Detail Modal */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-overlay.active {
+        display: flex;
+    }
+    
+    .modal {
+        background: var(--card-bg);
+        border-radius: 12px;
+        width: 90%;
+        max-width: 700px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .modal-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-title {
+        font-weight: 600;
+        font-size: 1.125rem;
+    }
+    
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--text-secondary);
+    }
+    
+    .modal-body {
+        padding: 1.25rem;
+    }
+    
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .detail-item {
+        padding: 1rem;
+        background: var(--bg-secondary);
+        border-radius: 8px;
+    }
+    
+    .detail-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        margin-bottom: 0.5rem;
+    }
+    
+    .detail-value {
+        font-weight: 500;
+        word-break: break-all;
+    }
+    
+    .shap-section {
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+    }
+    
+    .shap-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .shap-feature {
+        width: 140px;
+        font-size: 0.875rem;
+    }
+    
+    .shap-track {
+        flex: 1;
+        height: 16px;
+        background: var(--bg-secondary);
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .shap-center {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--border);
+    }
+    
+    .shap-fill {
+        position: absolute;
+        top: 2px;
+        bottom: 2px;
+        border-radius: 2px;
+    }
+    
+    .shap-fill.positive { background: #22c55e; left: 50%; }
+    .shap-fill.negative { background: #ef4444; right: 50%; }
+    
+    .shap-value {
+        width: 60px;
+        text-align: right;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    /* Export */
+    .export-options {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: var(--text-secondary);
+    }
+    
+    .empty-state svg {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    /* Loading */
+    .loading {
+        text-align: center;
+        padding: 3rem;
+    }
+    
+    .spinner {
+        display: inline-block;
+        width: 32px;
+        height: 32px;
+        border: 4px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">📋 Audit Trail</h1>
+        <p class="page-subtitle">Complete traceability for AI regulation compliance</p>
+    </div>
+    <div class="export-options">
+        <button class="btn" onclick="exportAudit('csv')">📥 Export CSV</button>
+        <button class="btn" onclick="exportAudit('json')">📥 Export JSON</button>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value classifications" id="statClassifications">-</div>
+        <div class="stat-label">Classifications</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value investigations" id="statInvestigations">-</div>
+        <div class="stat-label">Investigations</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value validations" id="statValidations">-</div>
+        <div class="stat-label">Validations</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value models" id="statModelActions">-</div>
+        <div class="stat-label">Model Actions</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value alerts" id="statAlerts">-</div>
+        <div class="stat-label">Alerts</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="filters-bar">
+    <div class="filter-group">
+        <label>Action Type</label>
+        <select id="filterAction" onchange="loadAuditLogs()">
+            <option value="">All Actions</option>
+            <option value="classification">Classification</option>
+            <option value="investigation">Investigation</option>
+            <option value="validation">Validation</option>
+            <option value="model">Model</option>
+            <option value="label">Label</option>
+            <option value="alert">Alert</option>
+            <option value="report">Report</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>Validation Status</label>
+        <select id="filterValidation" onchange="loadAuditLogs()">
+            <option value="">All</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="rejected">Rejected</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>Date From</label>
+        <input type="date" id="filterDateFrom" onchange="loadAuditLogs()">
+    </div>
+    <div class="filter-group">
+        <label>Date To</label>
+        <input type="date" id="filterDateTo" onchange="loadAuditLogs()">
+    </div>
+    <div class="filter-group">
+        <label>Investigation ID</label>
+        <input type="number" id="filterInvestigation" placeholder="ID" onchange="loadAuditLogs()" style="width:80px;">
+    </div>
+    <div class="filter-group">
+        <label>Wallet Address</label>
+        <input type="text" id="filterWallet" placeholder="0x..." onchange="loadAuditLogs()">
+    </div>
+    <div class="filter-group" style="margin-left: auto;">
+        <button class="btn" onclick="clearFilters()">Clear Filters</button>
+    </div>
+</div>
+
+<!-- Audit Log Table -->
+<div class="audit-card">
+    <div class="audit-header">
+        <span class="audit-title">Audit Logs</span>
+        <span id="totalCount" style="color: var(--text-secondary);">Loading...</span>
+    </div>
+    <table class="audit-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Target</th>
+                <th>User</th>
+                <th>Result</th>
+                <th>Confidence</th>
+                <th>Validation</th>
+            </tr>
+        </thead>
+        <tbody id="auditTableBody">
+            <tr>
+                <td colspan="7" class="loading">
+                    <div class="spinner"></div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    <div class="pagination" id="pagination">
+        <!-- Pagination buttons will be inserted here -->
+    </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detailModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">📋 Audit Log Detail</span>
+            <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="detailContent">
+            <!-- Detail content will be inserted here -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentPage = 1;
+    const pageSize = 20;
+    let totalLogs = 0;
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAuditStats();
+        loadAuditLogs();
+    });
+    
+    async function loadAuditStats() {
+        try {
+            const response = await fetch('/api/audit/stats');
+            if (response.ok) {
+                const stats = await response.json();
+                document.getElementById('statClassifications').textContent = stats.classifications || '0';
+                document.getElementById('statInvestigations').textContent = stats.investigations || '0';
+                document.getElementById('statValidations').textContent = stats.validations || '0';
+                document.getElementById('statModelActions').textContent = stats.model_actions || '0';
+                document.getElementById('statAlerts').textContent = stats.alerts || '0';
+            }
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+    
+    async function loadAuditLogs(page = 1) {
+        currentPage = page;
+        const tbody = document.getElementById('auditTableBody');
+        tbody.innerHTML = '<tr><td colspan="7" class="loading"><div class="spinner"></div></td></tr>';
+        
+        // Build query params
+        const params = new URLSearchParams();
+        params.append('page', page);
+        params.append('page_size', pageSize);
+        
+        const action = document.getElementById('filterAction').value;
+        const validation = document.getElementById('filterValidation').value;
+        const dateFrom = document.getElementById('filterDateFrom').value;
+        const dateTo = document.getElementById('filterDateTo').value;
+        const investigation = document.getElementById('filterInvestigation').value;
+        const wallet = document.getElementById('filterWallet').value;
+        
+        if (action) params.append('action_type', action);
+        if (validation) params.append('validation_status', validation);
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        if (investigation) params.append('investigation_id', investigation);
+        if (wallet) params.append('wallet_address', wallet);
+        
+        try {
+            const response = await fetch(`/api/audit?${params.toString()}`);
+            
+            if (!response.ok) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <p>No audit logs found</p>
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('totalCount').textContent = '0 logs';
+                renderPagination(0);
+                return;
+            }
+            
+            const data = await response.json();
+            totalLogs = data.total || data.logs.length;
+            
+            document.getElementById('totalCount').textContent = `${totalLogs} logs`;
+            
+            if (data.logs.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <p>No audit logs found</p>
+                        </td>
+                    </tr>
+                `;
+                renderPagination(0);
+                return;
+            }
+            
+            tbody.innerHTML = data.logs.map(log => `
+                <tr onclick="showDetail(${log.id})">
+                    <td>
+                        <div class="timestamp">${formatDate(log.timestamp)}</div>
+                        <div style="font-size:0.7rem;color:var(--text-tertiary);">${formatTime(log.timestamp)}</div>
+                    </td>
+                    <td>
+                        <span class="action-badge action-${log.action_type}">${log.action_type}</span>
+                    </td>
+                    <td>
+                        ${log.wallet_address ? `<span class="wallet-address">${truncateAddress(log.wallet_address)}</span>` : '-'}
+                        ${log.investigation_id ? `<br><span style="font-size:0.75rem;color:var(--text-secondary);">Case #${log.investigation_id}</span>` : ''}
+                    </td>
+                    <td>${log.user_id || 'System'}</td>
+                    <td>${log.predicted_type || '-'}</td>
+                    <td>
+                        ${log.confidence ? `<span style="font-weight:600;">${(log.confidence * 100).toFixed(0)}%</span>` : '-'}
+                    </td>
+                    <td>
+                        <span class="validation-badge validation-${log.validation_status || 'pending'}">
+                            ${log.validation_status || 'pending'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+            
+            renderPagination(totalLogs);
+            
+        } catch (error) {
+            console.error('Error loading audit logs:', error);
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;color:var(--danger);">
+                        Error loading audit logs
+                    </td>
+                </tr>
+            `;
+        }
+    }
+    
+    function renderPagination(total) {
+        const totalPages = Math.ceil(total / pageSize);
+        const container = document.getElementById('pagination');
+        
+        if (totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+        
+        let html = '';
+        
+        // Previous button
+        html += `<button class="page-btn" onclick="loadAuditLogs(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>`;
+        
+        // Page numbers
+        const maxVisible = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        
+        if (endPage - startPage < maxVisible - 1) {
+            startPage = Math.max(1, endPage - maxVisible + 1);
+        }
+        
+        if (startPage > 1) {
+            html += `<button class="page-btn" onclick="loadAuditLogs(1)">1</button>`;
+            if (startPage > 2) html += `<span style="padding:0 0.5rem;">...</span>`;
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="loadAuditLogs(${i})">${i}</button>`;
+        }
+        
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) html += `<span style="padding:0 0.5rem;">...</span>`;
+            html += `<button class="page-btn" onclick="loadAuditLogs(${totalPages})">${totalPages}</button>`;
+        }
+        
+        // Next button
+        html += `<button class="page-btn" onclick="loadAuditLogs(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>`;
+        
+        container.innerHTML = html;
+    }
+    
+    async function showDetail(logId) {
+        const modal = document.getElementById('detailModal');
+        const content = document.getElementById('detailContent');
+        
+        content.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+        modal.classList.add('active');
+        
+        try {
+            const response = await fetch(`/api/audit/${logId}`);
+            const log = await response.json();
+            
+            let html = `
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Timestamp</div>
+                        <div class="detail-value">${new Date(log.timestamp).toLocaleString()}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Action Type</div>
+                        <div class="detail-value">
+                            <span class="action-badge action-${log.action_type}">${log.action_type}</span>
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">User</div>
+                        <div class="detail-value">${log.user_id || 'System'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Investigation</div>
+                        <div class="detail-value">${log.investigation_id ? `<a href="/investigations/${log.investigation_id}">Case #${log.investigation_id}</a>` : '-'}</div>
+                    </div>
+                </div>
+            `;
+            
+            if (log.wallet_address) {
+                html += `
+                    <div class="detail-item" style="margin-bottom:1rem;">
+                        <div class="detail-label">Wallet Address</div>
+                        <div class="detail-value" style="font-family:monospace;">${log.wallet_address}</div>
+                    </div>
+                `;
+            }
+            
+            if (log.predicted_type) {
+                html += `
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">Predicted Type</div>
+                            <div class="detail-value" style="text-transform:capitalize;font-weight:600;">${log.predicted_type}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Confidence</div>
+                            <div class="detail-value">${log.confidence ? (log.confidence * 100).toFixed(1) + '%' : '-'}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (log.model_version) {
+                html += `
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">Model Version</div>
+                            <div class="detail-value">${log.model_version}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Run ID</div>
+                            <div class="detail-value" style="font-size:0.75rem;">${log.mlflow_run_id || '-'}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (log.validation_status) {
+                html += `
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">Validation Status</div>
+                            <div class="detail-value">
+                                <span class="validation-badge validation-${log.validation_status}">${log.validation_status}</span>
+                            </div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Validated At</div>
+                            <div class="detail-value">${log.validated_at ? new Date(log.validated_at).toLocaleString() : '-'}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // SHAP values
+            if (log.shap_values) {
+                let shapValues;
+                try {
+                    shapValues = typeof log.shap_values === 'string' ? JSON.parse(log.shap_values) : log.shap_values;
+                } catch (e) {
+                    shapValues = null;
+                }
+                
+                if (shapValues && Object.keys(shapValues).length > 0) {
+                    const sorted = Object.entries(shapValues)
+                        .map(([feature, data]) => ({
+                            feature,
+                            contribution: typeof data === 'object' ? data.shap_contribution : data
+                        }))
+                        .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+                    
+                    const maxContrib = Math.max(...sorted.map(v => Math.abs(v.contribution)), 0.1);
+                    
+                    html += `
+                        <div class="shap-section">
+                            <h4 style="margin-bottom:1rem;">🎯 SHAP Explanation</h4>
+                    `;
+                    
+                    for (const item of sorted) {
+                        const widthPercent = (Math.abs(item.contribution) / maxContrib) * 50;
+                        const isPositive = item.contribution >= 0;
+                        
+                        html += `
+                            <div class="shap-bar">
+                                <span class="shap-feature">${item.feature}</span>
+                                <div class="shap-track">
+                                    <div class="shap-center"></div>
+                                    <div class="shap-fill ${isPositive ? 'positive' : 'negative'}" 
+                                         style="width: ${widthPercent}%;"></div>
+                                </div>
+                                <span class="shap-value">${item.contribution >= 0 ? '+' : ''}${item.contribution.toFixed(4)}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    html += '</div>';
+                }
+            }
+            
+            if (log.notes) {
+                html += `
+                    <div class="detail-item" style="margin-top:1rem;">
+                        <div class="detail-label">Notes</div>
+                        <div class="detail-value">${log.notes}</div>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = html;
+            
+        } catch (error) {
+            content.innerHTML = '<p style="color:var(--danger);">Error loading audit log details</p>';
+        }
+    }
+    
+    function closeDetailModal() {
+        document.getElementById('detailModal').classList.remove('active');
+    }
+    
+    function clearFilters() {
+        document.getElementById('filterAction').value = '';
+        document.getElementById('filterValidation').value = '';
+        document.getElementById('filterDateFrom').value = '';
+        document.getElementById('filterDateTo').value = '';
+        document.getElementById('filterInvestigation').value = '';
+        document.getElementById('filterWallet').value = '';
+        loadAuditLogs(1);
+    }
+    
+    function exportAudit(format) {
+        // Build query params
+        const params = new URLSearchParams();
+        params.append('format', format);
+        
+        const action = document.getElementById('filterAction').value;
+        const validation = document.getElementById('filterValidation').value;
+        const dateFrom = document.getElementById('filterDateFrom').value;
+        const dateTo = document.getElementById('filterDateTo').value;
+        
+        if (action) params.append('action_type', action);
+        if (validation) params.append('validation_status', validation);
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        
+        window.location.href = `/api/audit/export?${params.toString()}`;
+    }
+    
+    // Utility functions
+    function formatDate(timestamp) {
+        return new Date(timestamp).toLocaleDateString();
+    }
+    
+    function formatTime(timestamp) {
+        return new Date(timestamp).toLocaleTimeString();
+    }
+    
+    function truncateAddress(address) {
+        if (!address) return '-';
+        return address.slice(0, 6) + '...' + address.slice(-4);
+    }
+</script>
+{% endblock %}

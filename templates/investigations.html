@@ -1,0 +1,630 @@
+{% extends "base.html" %}
+
+{% block title %}Investigations{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+    
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .page-subtitle {
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s;
+    }
+    
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-1px);
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+    }
+    
+    .stat-card h4 {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stat-card .value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .stat-card .change {
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+    }
+    
+    .stat-card .change.positive { color: var(--success); }
+    .stat-card .change.negative { color: var(--danger); }
+    
+    .investigations-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--card-bg);
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+    }
+    
+    .investigations-table th,
+    .investigations-table td {
+        padding: 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .investigations-table th {
+        background: var(--bg-secondary);
+        font-weight: 600;
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .investigations-table tr:hover {
+        background: var(--bg-hover);
+    }
+    
+    .investigations-table tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .status-badge.open {
+        background: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+    }
+    
+    .status-badge.in_progress {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+    }
+    
+    .status-badge.closed {
+        background: rgba(34, 197, 94, 0.1);
+        color: #22c55e;
+    }
+    
+    .priority-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .priority-badge.high { color: #ef4444; }
+    .priority-badge.medium { color: #f59e0b; }
+    .priority-badge.low { color: #22c55e; }
+    
+    .wallet-count {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        background: var(--bg-secondary);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.875rem;
+    }
+    
+    .action-btn {
+        background: none;
+        border: 1px solid var(--border);
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        color: var(--text-primary);
+        font-size: 0.875rem;
+        transition: all 0.2s;
+    }
+    
+    .action-btn:hover {
+        background: var(--bg-hover);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: var(--text-secondary);
+    }
+    
+    .empty-state svg {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    .filters {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .filter-select {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--card-bg);
+        color: var(--text-primary);
+        font-size: 0.875rem;
+    }
+    
+    .search-input {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--card-bg);
+        color: var(--text-primary);
+        font-size: 0.875rem;
+        min-width: 250px;
+    }
+    
+    /* Modal styles */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .modal-overlay.active {
+        display: flex;
+    }
+    
+    .modal {
+        background: var(--card-bg);
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 600px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    
+    .modal-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+    
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--text-secondary);
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+    
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 0.875rem;
+    }
+    
+    .form-group textarea {
+        min-height: 100px;
+        resize: vertical;
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        margin-top: 1.5rem;
+    }
+    
+    .btn-secondary {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">🔍 Investigations</h1>
+        <p class="page-subtitle">Forensic case management for blockchain fund tracking</p>
+    </div>
+    <button class="btn-primary" onclick="openCreateModal()">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+        </svg>
+        New Investigation
+    </button>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <h4>Total Cases</h4>
+        <div class="value" id="totalCases">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>Open Cases</h4>
+        <div class="value" id="openCases">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>In Progress</h4>
+        <div class="value" id="inProgressCases">-</div>
+    </div>
+    <div class="stat-card">
+        <h4>Total Loss (USD)</h4>
+        <div class="value" id="totalLoss">-</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="filters">
+    <input type="text" class="search-input" placeholder="Search cases..." id="searchInput" oninput="filterInvestigations()">
+    <select class="filter-select" id="statusFilter" onchange="filterInvestigations()">
+        <option value="">All Status</option>
+        <option value="open">Open</option>
+        <option value="in_progress">In Progress</option>
+        <option value="closed">Closed</option>
+    </select>
+    <select class="filter-select" id="chainFilter" onchange="filterInvestigations()">
+        <option value="">All Chains</option>
+        <option value="ETH">Ethereum</option>
+        <option value="POL">Polygon</option>
+        <option value="BSC">BSC</option>
+        <option value="BASE">Base</option>
+    </select>
+</div>
+
+<!-- Investigations Table -->
+<table class="investigations-table" id="investigationsTable">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Case Name</th>
+            <th>Status</th>
+            <th>Wallets</th>
+            <th>Tokens</th>
+            <th>Reported Loss</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="investigationsBody">
+        <tr>
+            <td colspan="8" class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="m21 21-4.35-4.35"/>
+                </svg>
+                <p>Loading investigations...</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- Create Investigation Modal -->
+<div class="modal-overlay" id="createModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title">🆕 New Investigation</h2>
+            <button class="modal-close" onclick="closeCreateModal()">&times;</button>
+        </div>
+        
+        <form id="createForm" onsubmit="createInvestigation(event)">
+            <div class="form-group">
+                <label>Case Name *</label>
+                <input type="text" name="name" required placeholder="e.g., GHST Hack Investigation 2026-01-15">
+            </div>
+            
+            <div class="form-group">
+                <label>Description</label>
+                <textarea name="description" placeholder="Brief description of the incident..."></textarea>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Incident Date</label>
+                    <input type="datetime-local" name="incident_date">
+                </div>
+                <div class="form-group">
+                    <label>Reported Loss (USD)</label>
+                    <input type="number" name="reported_loss_usd" placeholder="50000">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Victim Wallet Address *</label>
+                <input type="text" name="victim_address" required placeholder="0x..." pattern="0x[a-fA-F0-9]{40}">
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Chain *</label>
+                    <select name="chain" required>
+                        <option value="POL">Polygon (POL)</option>
+                        <option value="ETH">Ethereum (ETH)</option>
+                        <option value="BSC">BSC</option>
+                        <option value="BASE">Base</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Token Symbol</label>
+                    <input type="text" name="token_symbol" placeholder="GHST">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Token Contract</label>
+                    <input type="text" name="token_contract" placeholder="0x...">
+                </div>
+                <div class="form-group">
+                    <label>Stolen Amount</label>
+                    <input type="number" name="stolen_amount" placeholder="10000">
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button type="button" class="btn-secondary" onclick="closeCreateModal()">Cancel</button>
+                <button type="submit" class="btn-primary">Create Investigation</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allInvestigations = [];
+    
+    // Load investigations on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadInvestigations();
+    });
+    
+    async function loadInvestigations() {
+        try {
+            const response = await fetch('/api/investigations');
+            if (!response.ok) throw new Error('Failed to load investigations');
+            
+            const data = await response.json();
+            allInvestigations = data.investigations || [];
+            
+            updateStats();
+            renderInvestigations(allInvestigations);
+        } catch (error) {
+            console.error('Error loading investigations:', error);
+            showNotification('Failed to load investigations', 'error');
+        }
+    }
+    
+    function updateStats() {
+        const total = allInvestigations.length;
+        const open = allInvestigations.filter(i => i.status === 'open').length;
+        const inProgress = allInvestigations.filter(i => i.status === 'in_progress').length;
+        const totalLoss = allInvestigations.reduce((sum, i) => sum + (i.reported_loss_usd || 0), 0);
+        
+        document.getElementById('totalCases').textContent = total;
+        document.getElementById('openCases').textContent = open;
+        document.getElementById('inProgressCases').textContent = inProgress;
+        document.getElementById('totalLoss').textContent = '$' + totalLoss.toLocaleString();
+    }
+    
+    function renderInvestigations(investigations) {
+        const tbody = document.getElementById('investigationsBody');
+        
+        if (investigations.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="m21 21-4.35-4.35"/>
+                        </svg>
+                        <p>No investigations found. Create your first case!</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        tbody.innerHTML = investigations.map(inv => `
+            <tr>
+                <td><strong>#${inv.id}</strong></td>
+                <td>
+                    <a href="/investigations/${inv.id}" style="color: var(--primary); text-decoration: none; font-weight: 500;">
+                        ${inv.name}
+                    </a>
+                    ${inv.description ? `<br><small style="color: var(--text-secondary);">${inv.description.substring(0, 50)}...</small>` : ''}
+                </td>
+                <td><span class="status-badge ${inv.status}">${inv.status.replace('_', ' ')}</span></td>
+                <td><span class="wallet-count">👛 ${inv.wallet_count || 0}</span></td>
+                <td><span class="wallet-count">🪙 ${inv.token_count || 0}</span></td>
+                <td>${inv.reported_loss_usd ? '$' + inv.reported_loss_usd.toLocaleString() : '-'}</td>
+                <td><small>${new Date(inv.created_at).toLocaleDateString()}</small></td>
+                <td>
+                    <a href="/investigations/${inv.id}" class="action-btn">View</a>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    function filterInvestigations() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const status = document.getElementById('statusFilter').value;
+        const chain = document.getElementById('chainFilter').value;
+        
+        let filtered = allInvestigations;
+        
+        if (search) {
+            filtered = filtered.filter(i => 
+                i.name.toLowerCase().includes(search) ||
+                (i.description && i.description.toLowerCase().includes(search))
+            );
+        }
+        
+        if (status) {
+            filtered = filtered.filter(i => i.status === status);
+        }
+        
+        // Chain filter would require additional data
+        
+        renderInvestigations(filtered);
+    }
+    
+    function openCreateModal() {
+        document.getElementById('createModal').classList.add('active');
+    }
+    
+    function closeCreateModal() {
+        document.getElementById('createModal').classList.remove('active');
+        document.getElementById('createForm').reset();
+    }
+    
+    async function createInvestigation(event) {
+        event.preventDefault();
+        
+        const form = event.target;
+        const formData = new FormData(form);
+        
+        const chainMap = { 'ETH': 1, 'BSC': 56, 'POL': 137, 'BASE': 8453 };
+        const chain = formData.get('chain');
+        
+        const payload = {
+            name: formData.get('name'),
+            description: formData.get('description'),
+            incident_date: formData.get('incident_date'),
+            reported_loss_usd: parseFloat(formData.get('reported_loss_usd')) || null,
+            created_by: 'analyst',
+            victim_wallets: [{
+                address: formData.get('victim_address'),
+                chain: chain
+            }]
+        };
+        
+        // Add token if provided
+        if (formData.get('token_symbol')) {
+            payload.tokens = [{
+                symbol: formData.get('token_symbol'),
+                contract_address: formData.get('token_contract') || '',
+                chain: chain,
+                stolen_amount: parseFloat(formData.get('stolen_amount')) || 0
+            }];
+        }
+        
+        try {
+            const response = await fetch('/api/investigations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to create investigation');
+            }
+            
+            const result = await response.json();
+            showNotification(`Investigation #${result.id} created successfully!`, 'success');
+            closeCreateModal();
+            loadInvestigations();
+            
+            // Redirect to the new investigation
+            window.location.href = `/investigations/${result.id}`;
+            
+        } catch (error) {
+            console.error('Error creating investigation:', error);
+            showNotification(error.message, 'error');
+        }
+    }
+</script>
+{% endblock %}

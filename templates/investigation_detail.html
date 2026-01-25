@@ -1,0 +1,975 @@
+{% extends "base.html" %}
+
+{% block title %}Investigation #{{ investigation_id }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vis-network@9/dist/dist/vis-network.min.css">
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .page-subtitle {
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+    
+    .status-badge.open { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+    .status-badge.in_progress { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+    .status-badge.closed { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    
+    .header-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        border: 1px solid var(--border);
+        background: var(--card-bg);
+        color: var(--text-primary);
+        transition: all 0.2s;
+    }
+    
+    .btn:hover { background: var(--bg-hover); }
+    .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-success { background: #22c55e; color: white; border-color: #22c55e; }
+    .btn-warning { background: #f59e0b; color: white; border-color: #f59e0b; }
+    .btn-danger { background: #ef4444; color: white; border-color: #ef4444; }
+    
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    
+    @media (max-width: 768px) {
+        .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+    
+    .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    .card-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .card-title {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    
+    .card-body { padding: 1.25rem; }
+    
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    
+    /* Graph visualization */
+    #walletGraph {
+        height: 400px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg-primary);
+    }
+    
+    /* Wallets table */
+    .wallets-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .wallets-table th,
+    .wallets-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .wallets-table th {
+        background: var(--bg-secondary);
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+    }
+    
+    .wallets-table tr:hover { background: var(--bg-hover); }
+    
+    .wallet-address {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+    }
+    
+    .role-badge {
+        display: inline-block;
+        padding: 0.125rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .role-badge.victim { background: #fecaca; color: #b91c1c; }
+    .role-badge.related { background: #e5e7eb; color: #4b5563; }
+    .role-badge.exchange { background: #bbf7d0; color: #166534; }
+    .role-badge.bridge { background: #ddd6fe; color: #6d28d9; }
+    .role-badge.mixer { background: #fef3c7; color: #92400e; }
+    
+    .depth-indicator {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--bg-secondary);
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    /* Timeline */
+    .timeline {
+        position: relative;
+        padding-left: 2rem;
+    }
+    
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 8px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--border);
+    }
+    
+    .timeline-item {
+        position: relative;
+        padding-bottom: 1.5rem;
+    }
+    
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -1.5rem;
+        top: 0.25rem;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--primary);
+        border: 2px solid var(--card-bg);
+    }
+    
+    .timeline-time {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+    
+    .timeline-content {
+        margin-top: 0.25rem;
+    }
+    
+    /* SHAP explanation */
+    .shap-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .shap-feature {
+        width: 150px;
+        font-size: 0.75rem;
+        text-align: right;
+    }
+    
+    .shap-value-bar {
+        flex: 1;
+        height: 16px;
+        background: var(--bg-secondary);
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .shap-value-fill {
+        height: 100%;
+        border-radius: 4px;
+    }
+    
+    .shap-value-fill.positive { background: #22c55e; }
+    .shap-value-fill.negative { background: #ef4444; }
+    
+    /* Loading state */
+    .loading {
+        text-align: center;
+        padding: 2rem;
+        color: var(--text-secondary);
+    }
+    
+    .loading::after {
+        content: '';
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-left: 0.5rem;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    /* Tabs */
+    .tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 1.5rem;
+    }
+    
+    .tab {
+        padding: 0.75rem 1.25rem;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-weight: 500;
+        color: var(--text-secondary);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+    }
+    
+    .tab.active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+    }
+    
+    .tab:hover:not(.active) {
+        color: var(--text-primary);
+    }
+    
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    
+    /* Add wallet modal */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .modal-overlay.active { display: flex; }
+    
+    .modal {
+        background: var(--card-bg);
+        border-radius: 12px;
+        padding: 1.5rem;
+        max-width: 500px;
+        width: 90%;
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    
+    .modal-title { font-size: 1.125rem; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 1.25rem; cursor: pointer; }
+    
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    .form-group input, .form-group select {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+    }
+    
+    .form-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="/investigations" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem;">
+            ← Back to Investigations
+        </a>
+        <h1 class="page-title" id="caseName">Loading...</h1>
+        <p class="page-subtitle" id="caseDescription"></p>
+    </div>
+    <div class="header-actions">
+        <button class="btn" onclick="openAddWalletModal()">+ Add Wallet</button>
+        <button class="btn btn-primary" onclick="expandInvestigation()">🔍 Auto-Expand</button>
+        <button class="btn btn-warning" onclick="classifyWallets()">🤖 Classify All</button>
+        <button class="btn btn-success" onclick="generateReport()">📊 Report</button>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid-3" style="margin-bottom: 1.5rem;">
+    <div class="card">
+        <div class="card-body" style="text-align: center;">
+            <div class="stat-value" id="walletCount">-</div>
+            <div class="stat-label">Wallets Tracked</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body" style="text-align: center;">
+            <div class="stat-value" id="tokenCount">-</div>
+            <div class="stat-label">Tokens Tracked</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body" style="text-align: center;">
+            <div class="stat-value" id="reportedLoss">-</div>
+            <div class="stat-label">Reported Loss</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab active" onclick="showTab('graph')">📊 Graph View</button>
+    <button class="tab" onclick="showTab('wallets')">👛 Wallets</button>
+    <button class="tab" onclick="showTab('tokens')">🪙 Tokens</button>
+    <button class="tab" onclick="showTab('timeline')">📅 Timeline</button>
+    <button class="tab" onclick="showTab('report')">📋 Report</button>
+</div>
+
+<!-- Graph Tab -->
+<div class="tab-content active" id="tab-graph">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Wallet Flow Graph</span>
+            <span id="graphStatus" style="color: var(--text-secondary); font-size: 0.875rem;"></span>
+        </div>
+        <div class="card-body">
+            <div id="walletGraph"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Wallets Tab -->
+<div class="tab-content" id="tab-wallets">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Investigation Wallets</span>
+        </div>
+        <div class="card-body" style="padding: 0;">
+            <table class="wallets-table">
+                <thead>
+                    <tr>
+                        <th>Address</th>
+                        <th>Role</th>
+                        <th>Chain</th>
+                        <th>Depth</th>
+                        <th>Received</th>
+                        <th>Sent</th>
+                        <th>Classification</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="walletsBody">
+                    <tr><td colspan="8" class="loading">Loading wallets...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Tokens Tab -->
+<div class="tab-content" id="tab-tokens">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Tracked Tokens</span>
+        </div>
+        <div class="card-body" id="tokensBody">
+            <p class="loading">Loading tokens...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Timeline Tab -->
+<div class="tab-content" id="tab-timeline">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Investigation Timeline</span>
+        </div>
+        <div class="card-body">
+            <div class="timeline" id="timelineBody">
+                <p class="loading">Loading timeline...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Report Tab -->
+<div class="tab-content" id="tab-report">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Investigation Report</span>
+            <button class="btn" onclick="downloadReport()">📥 Download PDF</button>
+        </div>
+        <div class="card-body" id="reportBody">
+            <p class="loading">Generate a report to view summary...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Add Wallet Modal -->
+<div class="modal-overlay" id="addWalletModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Add Wallet to Investigation</span>
+            <button class="modal-close" onclick="closeAddWalletModal()">&times;</button>
+        </div>
+        <form id="addWalletForm" onsubmit="addWallet(event)">
+            <div class="form-group">
+                <label>Wallet Address</label>
+                <input type="text" name="address" required placeholder="0x..." pattern="0x[a-fA-F0-9]{40}">
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select name="wallet_type">
+                    <option value="related">Related</option>
+                    <option value="victim">Victim</option>
+                    <option value="exchange">Exchange</option>
+                    <option value="bridge">Bridge</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Chain</label>
+                <select name="chain">
+                    <option value="POL">Polygon</option>
+                    <option value="ETH">Ethereum</option>
+                    <option value="BSC">BSC</option>
+                    <option value="BASE">Base</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Notes</label>
+                <input type="text" name="notes" placeholder="Optional notes...">
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn" onclick="closeAddWalletModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Wallet</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Classification Modal -->
+<div class="modal-overlay" id="classifyModal">
+    <div class="modal" style="max-width: 700px;">
+        <div class="modal-header">
+            <span class="modal-title">🤖 Wallet Classification</span>
+            <button class="modal-close" onclick="closeClassifyModal()">&times;</button>
+        </div>
+        <div id="classifyBody">
+            <p class="loading">Running classification...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9/dist/vis-network.min.js"></script>
+<script>
+    const investigationId = {{ investigation_id }};
+    let investigationData = null;
+    let network = null;
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        loadInvestigation();
+    });
+    
+    async function loadInvestigation() {
+        try {
+            const response = await fetch(`/api/investigations/${investigationId}`);
+            if (!response.ok) throw new Error('Investigation not found');
+            
+            investigationData = await response.json();
+            renderInvestigation();
+        } catch (error) {
+            console.error('Error:', error);
+            showNotification('Failed to load investigation', 'error');
+        }
+    }
+    
+    function renderInvestigation() {
+        const inv = investigationData;
+        
+        // Header
+        document.getElementById('caseName').innerHTML = `
+            ${inv.name}
+            <span class="status-badge ${inv.status}">${inv.status.replace('_', ' ')}</span>
+        `;
+        document.getElementById('caseDescription').textContent = inv.description || '';
+        
+        // Stats
+        document.getElementById('walletCount').textContent = inv.wallets ? inv.wallets.length : 0;
+        document.getElementById('tokenCount').textContent = inv.tokens ? inv.tokens.length : 0;
+        document.getElementById('reportedLoss').textContent = inv.reported_loss_usd 
+            ? '$' + inv.reported_loss_usd.toLocaleString() 
+            : '-';
+        
+        // Render components
+        renderGraph();
+        renderWallets();
+        renderTokens();
+        renderTimeline();
+    }
+    
+    function renderGraph() {
+        const wallets = investigationData.wallets || [];
+        
+        if (wallets.length === 0) {
+            document.getElementById('walletGraph').innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">No wallets to visualize</p>';
+            return;
+        }
+        
+        // Create nodes
+        const nodes = wallets.map(w => ({
+            id: w.address,
+            label: w.address.substring(0, 8) + '...',
+            title: `${w.address}\nRole: ${w.role}\nDepth: ${w.depth}`,
+            color: getRoleColor(w.role),
+            shape: w.role === 'victim' ? 'diamond' : 'dot',
+            size: w.role === 'victim' ? 30 : 20
+        }));
+        
+        // Create edges from parent relationships
+        const edges = wallets
+            .filter(w => w.parent_address)
+            .map(w => ({
+                from: w.parent_address,
+                to: w.address,
+                arrows: 'to',
+                label: w.total_received > 0 ? (w.total_received / 1e18).toFixed(2) : ''
+            }));
+        
+        const container = document.getElementById('walletGraph');
+        const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+        
+        const options = {
+            layout: { hierarchical: { direction: 'LR', sortMethod: 'directed' } },
+            physics: { enabled: false },
+            interaction: { hover: true },
+            nodes: { font: { size: 12 } }
+        };
+        
+        network = new vis.Network(container, data, options);
+        document.getElementById('graphStatus').textContent = `${nodes.length} wallets, ${edges.length} flows`;
+        
+        network.on('click', (params) => {
+            if (params.nodes.length > 0) {
+                const address = params.nodes[0];
+                showWalletDetails(address);
+            }
+        });
+    }
+    
+    function getRoleColor(role) {
+        const colors = {
+            'victim': '#ef4444',
+            'related': '#6b7280',
+            'exchange': '#22c55e',
+            'bridge': '#8b5cf6',
+            'mixer': '#f59e0b'
+        };
+        return colors[role] || '#6b7280';
+    }
+    
+    function renderWallets() {
+        const wallets = investigationData.wallets || [];
+        const tbody = document.getElementById('walletsBody');
+        
+        if (wallets.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;">No wallets</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = wallets.map(w => `
+            <tr>
+                <td>
+                    <span class="wallet-address">${w.address}</span>
+                    <button onclick="navigator.clipboard.writeText('${w.address}')" style="margin-left:0.5rem;background:none;border:none;cursor:pointer;">📋</button>
+                </td>
+                <td><span class="role-badge ${w.role}">${w.role}</span></td>
+                <td>${w.chain || 'POL'}</td>
+                <td><span class="depth-indicator">${w.depth}</span></td>
+                <td>${w.total_received ? (w.total_received).toFixed(4) : '-'}</td>
+                <td>${w.total_sent ? (w.total_sent).toFixed(4) : '-'}</td>
+                <td>
+                    <button class="btn" onclick="classifySingleWallet('${w.address}', '${w.chain || 'POL'}')">
+                        🔍 Classify
+                    </button>
+                </td>
+                <td>
+                    ${w.is_flagged ? '⚠️' : ''}
+                    <button class="btn" onclick="showWalletDetails('${w.address}')">Details</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    function renderTokens() {
+        const tokens = investigationData.tokens || [];
+        const container = document.getElementById('tokensBody');
+        
+        if (tokens.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-secondary);">No tokens tracked</p>';
+            return;
+        }
+        
+        container.innerHTML = tokens.map(t => `
+            <div style="display:flex;justify-content:space-between;padding:0.75rem;border:1px solid var(--border);border-radius:8px;margin-bottom:0.5rem;">
+                <div>
+                    <strong>${t.symbol}</strong> on ${t.chain || 'POL'}
+                    <br><small style="color:var(--text-secondary);">${t.contract_address}</small>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:1.25rem;font-weight:600;">${t.stolen_amount ? t.stolen_amount.toLocaleString() : '-'}</div>
+                    <small style="color:var(--text-secondary);">Stolen Amount</small>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function renderTimeline() {
+        const inv = investigationData;
+        const timeline = document.getElementById('timelineBody');
+        
+        const events = [
+            { time: inv.created_at, content: 'Investigation created', type: 'create' }
+        ];
+        
+        if (inv.incident_date) {
+            events.unshift({ time: inv.incident_date, content: 'Incident reported', type: 'incident' });
+        }
+        
+        if (inv.updated_at && inv.updated_at !== inv.created_at) {
+            events.push({ time: inv.updated_at, content: 'Last updated', type: 'update' });
+        }
+        
+        events.sort((a, b) => new Date(a.time) - new Date(b.time));
+        
+        timeline.innerHTML = events.map(e => `
+            <div class="timeline-item">
+                <div class="timeline-time">${new Date(e.time).toLocaleString()}</div>
+                <div class="timeline-content">${e.content}</div>
+            </div>
+        `).join('');
+    }
+    
+    function showTab(tabId) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        
+        document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+        document.getElementById(`tab-${tabId}`).classList.add('active');
+    }
+    
+    function openAddWalletModal() {
+        document.getElementById('addWalletModal').classList.add('active');
+    }
+    
+    function closeAddWalletModal() {
+        document.getElementById('addWalletModal').classList.remove('active');
+        document.getElementById('addWalletForm').reset();
+    }
+    
+    async function addWallet(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+        
+        try {
+            const response = await fetch(`/api/investigations/${investigationId}/wallets`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    address: formData.get('address'),
+                    wallet_type: formData.get('wallet_type'),
+                    chain: formData.get('chain'),
+                    notes: formData.get('notes')
+                })
+            });
+            
+            if (!response.ok) throw new Error('Failed to add wallet');
+            
+            showNotification('Wallet added successfully', 'success');
+            closeAddWalletModal();
+            loadInvestigation();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    }
+    
+    async function expandInvestigation() {
+        showNotification('Starting auto-expansion...', 'info');
+        
+        try {
+            const response = await fetch(`/api/investigations/${investigationId}/expand`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            
+            if (!response.ok) throw new Error('Failed to start expansion');
+            
+            const result = await response.json();
+            showNotification(`Expansion task started: ${result.task_id}`, 'success');
+            
+            // Poll for completion
+            setTimeout(() => loadInvestigation(), 5000);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    }
+    
+    async function classifyWallets() {
+        document.getElementById('classifyModal').classList.add('active');
+        document.getElementById('classifyBody').innerHTML = '<p class="loading">Running ML classification on all wallets...</p>';
+        
+        try {
+            const response = await fetch(`/api/investigations/${investigationId}/classify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            
+            if (!response.ok) throw new Error('Classification failed');
+            
+            const result = await response.json();
+            showNotification(`Classification started: ${result.task_id}`, 'success');
+            
+            // Wait and reload
+            setTimeout(async () => {
+                await loadInvestigation();
+                closeClassifyModal();
+                showNotification('Classification complete!', 'success');
+            }, 5000);
+        } catch (error) {
+            document.getElementById('classifyBody').innerHTML = `<p style="color:var(--danger);">Error: ${error.message}</p>`;
+        }
+    }
+    
+    function closeClassifyModal() {
+        document.getElementById('classifyModal').classList.remove('active');
+    }
+    
+    async function classifySingleWallet(address, chain) {
+        showNotification(`Classifying ${address.substring(0,10)}...`, 'info');
+        
+        try {
+            const response = await fetch(`/api/wallets/${address}/classify?chain=${chain}`);
+            if (!response.ok) throw new Error('Classification failed');
+            
+            const result = await response.json();
+            
+            // Show result in modal
+            document.getElementById('classifyModal').classList.add('active');
+            document.getElementById('classifyBody').innerHTML = `
+                <div style="margin-bottom:1rem;">
+                    <strong>Address:</strong> <code>${result.address}</code>
+                </div>
+                <div style="margin-bottom:1rem;">
+                    <strong>Predicted Type:</strong> 
+                    <span class="role-badge ${result.predicted_type}">${result.predicted_type}</span>
+                    (${(result.confidence * 100).toFixed(0)}% confidence)
+                </div>
+                ${result.features ? `
+                <div style="margin-bottom:1rem;">
+                    <strong>Features:</strong>
+                    <ul style="margin-top:0.5rem;padding-left:1.5rem;">
+                        <li>Transactions: ${result.features.tx_count}</li>
+                        <li>Counterparties: ${result.features.unique_counterparties}</li>
+                        <li>Avg Value: ${result.features.avg_tx_value?.toFixed(4)}</li>
+                        <li>Total Volume: ${result.features.total_volume?.toFixed(2)}</li>
+                    </ul>
+                </div>
+                ` : ''}
+                ${result.shap_explanation ? renderShapExplanation(result.shap_explanation) : ''}
+            `;
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    }
+    
+    function renderShapExplanation(explanation) {
+        if (!explanation || !explanation.shap_values) return '';
+        
+        const values = Object.entries(explanation.shap_values)
+            .sort((a, b) => Math.abs(b[1].shap_contribution) - Math.abs(a[1].shap_contribution));
+        
+        return `
+            <div style="margin-bottom:1rem;">
+                <strong>SHAP Explanation:</strong>
+                <div style="margin-top:0.5rem;">
+                    ${values.slice(0, 5).map(([feature, data]) => `
+                        <div class="shap-bar">
+                            <span class="shap-feature">${feature}</span>
+                            <div class="shap-value-bar">
+                                <div class="shap-value-fill ${data.shap_contribution >= 0 ? 'positive' : 'negative'}"
+                                     style="width: ${Math.min(Math.abs(data.shap_contribution) * 100, 100)}%;"></div>
+                            </div>
+                            <span style="width:60px;font-size:0.75rem;">${data.shap_contribution.toFixed(3)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    async function generateReport() {
+        try {
+            const response = await fetch(`/api/investigations/${investigationId}/report`);
+            if (!response.ok) throw new Error('Failed to generate report');
+            
+            const result = await response.json();
+            const report = result.report;
+            
+            // Show report tab
+            showTab('report');
+            
+            document.getElementById('reportBody').innerHTML = `
+                <div style="margin-bottom:2rem;">
+                    <h3 style="margin-bottom:1rem;">📊 Summary</h3>
+                    <div class="grid-3">
+                        <div style="background:var(--bg-secondary);padding:1rem;border-radius:8px;">
+                            <div style="font-size:1.5rem;font-weight:700;">${report.summary.total_wallets}</div>
+                            <div style="font-size:0.875rem;color:var(--text-secondary);">Total Wallets</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:1rem;border-radius:8px;">
+                            <div style="font-size:1.5rem;font-weight:700;">${report.summary.flagged_wallets}</div>
+                            <div style="font-size:0.875rem;color:var(--text-secondary);">Flagged Wallets</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:1rem;border-radius:8px;">
+                            <div style="font-size:1.5rem;font-weight:700;">${report.summary.exchange_endpoints}</div>
+                            <div style="font-size:0.875rem;color:var(--text-secondary);">Exchange Endpoints</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom:2rem;">
+                    <h3 style="margin-bottom:1rem;">👛 Wallets by Role</h3>
+                    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+                        ${Object.entries(report.wallets_by_role || {}).map(([role, count]) => `
+                            <div style="background:var(--bg-secondary);padding:0.5rem 1rem;border-radius:8px;">
+                                <span class="role-badge ${role}">${role}</span>: ${count}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                
+                <div style="margin-bottom:2rem;">
+                    <h3 style="margin-bottom:1rem;">📍 Wallets by Depth</h3>
+                    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+                        ${Object.entries(report.wallets_by_depth || {}).map(([depth, count]) => `
+                            <div style="background:var(--bg-secondary);padding:0.5rem 1rem;border-radius:8px;">
+                                Depth ${depth}: ${count} wallets
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                
+                ${report.exchange_endpoints && report.exchange_endpoints.length > 0 ? `
+                <div style="margin-bottom:2rem;">
+                    <h3 style="margin-bottom:1rem;">🏦 Exchange Endpoints</h3>
+                    ${report.exchange_endpoints.map(e => `
+                        <div style="background:#dcfce7;padding:1rem;border-radius:8px;margin-bottom:0.5rem;">
+                            <code>${e.address}</code>
+                            <br>Received: ${e.total_received?.toFixed(4) || '-'} tokens
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+                
+                ${report.flagged_wallets && report.flagged_wallets.length > 0 ? `
+                <div style="margin-bottom:2rem;">
+                    <h3 style="margin-bottom:1rem;">⚠️ Flagged Wallets</h3>
+                    ${report.flagged_wallets.map(w => `
+                        <div style="background:#fef3c7;padding:1rem;border-radius:8px;margin-bottom:0.5rem;">
+                            <code>${w.address}</code>
+                            <br>Role: ${w.role} | Depth: ${w.depth} | Received: ${w.total_received?.toFixed(4) || '-'}
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+            `;
+            
+            showNotification('Report generated!', 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    }
+    
+    async function showWalletDetails(address) {
+        // For now, just classify it
+        const wallet = investigationData.wallets.find(w => w.address === address);
+        if (wallet) {
+            classifySingleWallet(address, wallet.chain || 'POL');
+        }
+    }
+    
+    function downloadReport() {
+        showNotification('PDF export coming soon!', 'info');
+    }
+</script>
+{% endblock %}

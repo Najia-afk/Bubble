@@ -33,7 +33,14 @@ def make_celery(app_name=__name__):
         app_name, 
         broker=app_config['CELERY_BROKER_URL'], 
         backend=app_config['result_backend'],
-        include=['api.tasks.tasks', 'api.tasks.fetch_token_data_task', 'api.tasks.tigergraph_tasks']
+        include=[
+            'api.tasks.tasks', 
+            'api.tasks.fetch_token_data_task', 
+            'api.tasks.tigergraph_tasks', 
+            'api.tasks.import_labels_task', 
+            'api.tasks.investigation_tasks',
+            'api.tasks.ml_tasks'
+        ]
     )
     celery.conf.update(app_config)
     celery.conf.broker_connection_retry_on_startup = True 

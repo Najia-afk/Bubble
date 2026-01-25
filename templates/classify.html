@@ -1,0 +1,808 @@
+{% extends "base.html" %}
+
+{% block title %}Wallet Classification{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        margin-bottom: 2rem;
+    }
+    
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .page-subtitle {
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    .classify-form {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .form-row {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .form-group {
+        flex: 1;
+        min-width: 200px;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+    
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 1rem;
+    }
+    
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .btn-primary:hover {
+        background: var(--primary-hover);
+    }
+    
+    .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .result-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+    
+    .result-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .result-title {
+        font-weight: 600;
+        font-size: 1.125rem;
+    }
+    
+    .result-body {
+        padding: 1.5rem;
+    }
+    
+    .prediction-box {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        padding: 1.5rem;
+        background: var(--bg-secondary);
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+    
+    .prediction-type {
+        font-size: 2rem;
+        font-weight: 700;
+        text-transform: capitalize;
+    }
+    
+    .prediction-type.exchange { color: #22c55e; }
+    .prediction-type.bridge { color: #8b5cf6; }
+    .prediction-type.mixer { color: #f59e0b; }
+    .prediction-type.whale { color: #3b82f6; }
+    .prediction-type.bot { color: #ef4444; }
+    .prediction-type.defi { color: #06b6d4; }
+    .prediction-type.unknown { color: #6b7280; }
+    
+    .confidence-bar {
+        flex: 1;
+    }
+    
+    .confidence-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+    }
+    
+    .confidence-track {
+        height: 12px;
+        background: var(--bg-primary);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    
+    .confidence-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e);
+        border-radius: 6px;
+        transition: width 0.5s;
+    }
+    
+    .confidence-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        text-align: right;
+        min-width: 80px;
+    }
+    
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .feature-item {
+        background: var(--bg-secondary);
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .feature-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .feature-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    /* SHAP Visualization */
+    .shap-section {
+        margin-top: 1.5rem;
+    }
+    
+    .shap-title {
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .shap-bar-container {
+        margin-bottom: 0.75rem;
+    }
+    
+    .shap-bar-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .shap-bar-track {
+        height: 24px;
+        background: var(--bg-secondary);
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .shap-bar-center {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--border);
+    }
+    
+    .shap-bar-fill {
+        position: absolute;
+        top: 2px;
+        bottom: 2px;
+        border-radius: 2px;
+        transition: all 0.3s;
+    }
+    
+    .shap-bar-fill.positive {
+        background: #22c55e;
+        left: 50%;
+    }
+    
+    .shap-bar-fill.negative {
+        background: #ef4444;
+        right: 50%;
+    }
+    
+    .shap-legend {
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    
+    .shap-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .shap-legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+    }
+    
+    .shap-legend-dot.positive { background: #22c55e; }
+    .shap-legend-dot.negative { background: #ef4444; }
+    
+    /* Probability distribution */
+    .probabilities {
+        margin-top: 1.5rem;
+    }
+    
+    .prob-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .prob-label {
+        width: 100px;
+        font-size: 0.875rem;
+        text-transform: capitalize;
+    }
+    
+    .prob-bar {
+        flex: 1;
+        height: 20px;
+        background: var(--bg-secondary);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .prob-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s;
+    }
+    
+    .prob-value {
+        width: 50px;
+        text-align: right;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+    
+    /* Validation section */
+    .validation-section {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+    }
+    
+    .validation-title {
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+    
+    .validation-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .btn-validate {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--bg-secondary);
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+    }
+    
+    .btn-validate:hover {
+        background: var(--bg-hover);
+    }
+    
+    .btn-validate.confirm {
+        background: #dcfce7;
+        border-color: #22c55e;
+        color: #166534;
+    }
+    
+    .btn-validate.reject {
+        background: #fee2e2;
+        border-color: #ef4444;
+        color: #b91c1c;
+    }
+    
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: var(--text-secondary);
+    }
+    
+    .empty-state svg {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    /* History */
+    .history-section {
+        margin-top: 2rem;
+    }
+    
+    .history-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .history-item:hover {
+        background: var(--bg-hover);
+    }
+    
+    .history-address {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+    }
+    
+    .history-meta {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    
+    /* Loading */
+    .loading {
+        text-align: center;
+        padding: 2rem;
+    }
+    
+    .spinner {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        border: 3px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">🤖 Wallet Classification</h1>
+    <p class="page-subtitle">AI-powered wallet behavior analysis with SHAP explainability</p>
+</div>
+
+<!-- Classification Form -->
+<div class="classify-form">
+    <form id="classifyForm" onsubmit="classifyWallet(event)">
+        <div class="form-row">
+            <div class="form-group" style="flex: 2;">
+                <label>Wallet Address</label>
+                <input type="text" id="addressInput" name="address" required 
+                       placeholder="0x..." pattern="0x[a-fA-F0-9]{40}">
+            </div>
+            <div class="form-group">
+                <label>Chain</label>
+                <select id="chainSelect" name="chain">
+                    <option value="POL">Polygon (POL)</option>
+                    <option value="ETH">Ethereum (ETH)</option>
+                    <option value="BSC">BSC</option>
+                    <option value="BASE">Base</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Token (Optional)</label>
+                <input type="text" id="tokenInput" name="token" placeholder="GHST">
+            </div>
+            <div class="form-group" style="display: flex; align-items: flex-end;">
+                <button type="submit" class="btn-primary" id="classifyBtn">
+                    <span class="spinner" style="display:none;" id="loadingSpinner"></span>
+                    🔍 Classify
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Results Container -->
+<div id="resultsContainer">
+    <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <p>Enter a wallet address to analyze its behavior</p>
+        <p style="font-size: 0.875rem;">The AI will classify the wallet type and provide SHAP explanations</p>
+    </div>
+</div>
+
+<!-- Recent Classifications -->
+<div class="history-section">
+    <h3 style="margin-bottom: 1rem;">📜 Recent Classifications</h3>
+    <div id="historyContainer">
+        <p style="color: var(--text-secondary); text-align: center;">No recent classifications</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let classificationHistory = JSON.parse(localStorage.getItem('classificationHistory') || '[]');
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        renderHistory();
+    });
+    
+    async function classifyWallet(event) {
+        event.preventDefault();
+        
+        const address = document.getElementById('addressInput').value.trim();
+        const chain = document.getElementById('chainSelect').value;
+        const token = document.getElementById('tokenInput').value.trim();
+        
+        if (!address) return;
+        
+        // Show loading
+        document.getElementById('classifyBtn').disabled = true;
+        document.getElementById('loadingSpinner').style.display = 'inline-block';
+        document.getElementById('resultsContainer').innerHTML = '<div class="loading"><div class="spinner"></div><p style="margin-top:1rem;">Analyzing wallet behavior...</p></div>';
+        
+        try {
+            let url = `/api/wallets/${address}/classify?chain=${chain}`;
+            if (token) url += `&token=${token}`;
+            
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Classification failed');
+            
+            const result = await response.json();
+            
+            // Save to history
+            saveToHistory(result);
+            
+            // Render result
+            renderResult(result);
+            
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('resultsContainer').innerHTML = `
+                <div class="result-card">
+                    <div class="result-body" style="color: var(--danger);">
+                        <p>❌ Classification failed: ${error.message}</p>
+                    </div>
+                </div>
+            `;
+        } finally {
+            document.getElementById('classifyBtn').disabled = false;
+            document.getElementById('loadingSpinner').style.display = 'none';
+        }
+    }
+    
+    function renderResult(result) {
+        const container = document.getElementById('resultsContainer');
+        
+        const confidencePercent = (result.confidence * 100).toFixed(0);
+        const predClass = result.predicted_type || 'unknown';
+        
+        let html = `
+            <div class="result-card">
+                <div class="result-header">
+                    <span class="result-title">Classification Result</span>
+                    <span style="font-size:0.875rem;color:var(--text-secondary);">
+                        Source: ${result.source || 'ml_classification'}
+                    </span>
+                </div>
+                <div class="result-body">
+                    <!-- Prediction Box -->
+                    <div class="prediction-box">
+                        <div>
+                            <div class="prediction-type ${predClass}">${predClass}</div>
+                            <div style="color:var(--text-secondary);font-size:0.875rem;">${result.address}</div>
+                        </div>
+                        <div class="confidence-bar">
+                            <div class="confidence-label">Confidence Level</div>
+                            <div class="confidence-track">
+                                <div class="confidence-fill" style="width: ${confidencePercent}%;"></div>
+                            </div>
+                        </div>
+                        <div class="confidence-value">${confidencePercent}%</div>
+                    </div>
+                    
+                    <!-- Features -->
+                    ${result.features ? renderFeatures(result.features) : ''}
+                    
+                    <!-- SHAP Explanation -->
+                    ${result.shap_explanation ? renderShapExplanation(result.shap_explanation) : ''}
+                    
+                    <!-- Probabilities -->
+                    ${result.shap_explanation && result.shap_explanation.probabilities ? renderProbabilities(result.shap_explanation.probabilities) : ''}
+                    
+                    <!-- Validation Section -->
+                    <div class="validation-section">
+                        <div class="validation-title">🔐 Validate Classification</div>
+                        <p style="margin-bottom:1rem;color:var(--text-secondary);font-size:0.875rem;">
+                            Help improve the model by validating this classification:
+                        </p>
+                        <div class="validation-buttons">
+                            <button class="btn-validate confirm" onclick="validateClassification('${result.address}', '${predClass}', 'confirmed')">
+                                ✅ Confirm as ${predClass}
+                            </button>
+                            <button class="btn-validate" onclick="validateClassification('${result.address}', '${predClass}', 'exchange')">
+                                Actually Exchange
+                            </button>
+                            <button class="btn-validate" onclick="validateClassification('${result.address}', '${predClass}', 'bridge')">
+                                Actually Bridge
+                            </button>
+                            <button class="btn-validate" onclick="validateClassification('${result.address}', '${predClass}', 'mixer')">
+                                Actually Mixer
+                            </button>
+                            <button class="btn-validate" onclick="validateClassification('${result.address}', '${predClass}', 'whale')">
+                                Actually Whale
+                            </button>
+                            <button class="btn-validate reject" onclick="validateClassification('${result.address}', '${predClass}', 'unknown')">
+                                ❌ Unknown/Other
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+    
+    function renderFeatures(features) {
+        return `
+            <div class="features-grid">
+                <div class="feature-item">
+                    <div class="feature-value">${features.tx_count?.toLocaleString() || '-'}</div>
+                    <div class="feature-label">Transactions</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-value">${features.unique_counterparties?.toLocaleString() || '-'}</div>
+                    <div class="feature-label">Counterparties</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-value">${features.avg_tx_value?.toFixed(4) || '-'}</div>
+                    <div class="feature-label">Avg Tx Value</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-value">${features.max_tx_value?.toFixed(2) || '-'}</div>
+                    <div class="feature-label">Max Tx Value</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-value">${features.total_volume?.toFixed(2) || '-'}</div>
+                    <div class="feature-label">Total Volume</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-value">${features.in_out_ratio?.toFixed(3) || '-'}</div>
+                    <div class="feature-label">In/Out Ratio</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    function renderShapExplanation(explanation) {
+        if (!explanation || !explanation.shap_values) return '';
+        
+        const values = Object.entries(explanation.shap_values)
+            .map(([feature, data]) => ({
+                feature,
+                value: data.value,
+                contribution: data.shap_contribution
+            }))
+            .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+        
+        const maxContrib = Math.max(...values.map(v => Math.abs(v.contribution)), 0.1);
+        
+        let html = `
+            <div class="shap-section">
+                <div class="shap-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                    SHAP Feature Contributions
+                </div>
+                <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:1rem;">
+                    Shows how each feature pushed the prediction toward or away from this class
+                </p>
+        `;
+        
+        for (const item of values) {
+            const widthPercent = (Math.abs(item.contribution) / maxContrib) * 50;
+            const isPositive = item.contribution >= 0;
+            
+            html += `
+                <div class="shap-bar-container">
+                    <div class="shap-bar-label">
+                        <span>${item.feature}</span>
+                        <span>${item.contribution >= 0 ? '+' : ''}${item.contribution.toFixed(4)}</span>
+                    </div>
+                    <div class="shap-bar-track">
+                        <div class="shap-bar-center"></div>
+                        <div class="shap-bar-fill ${isPositive ? 'positive' : 'negative'}" 
+                             style="width: ${widthPercent}%;"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        html += `
+                <div class="shap-legend">
+                    <div class="shap-legend-item">
+                        <div class="shap-legend-dot negative"></div>
+                        <span>Decreases prediction</span>
+                    </div>
+                    <div class="shap-legend-item">
+                        <div class="shap-legend-dot positive"></div>
+                        <span>Increases prediction</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        return html;
+    }
+    
+    function renderProbabilities(probabilities) {
+        const colors = {
+            'exchange': '#22c55e',
+            'bridge': '#8b5cf6', 
+            'mixer': '#f59e0b',
+            'whale': '#3b82f6',
+            'bot': '#ef4444',
+            'defi': '#06b6d4',
+            'unknown': '#6b7280'
+        };
+        
+        const sorted = Object.entries(probabilities)
+            .sort((a, b) => b[1] - a[1]);
+        
+        let html = `
+            <div class="probabilities">
+                <h4 style="margin-bottom:1rem;">📊 Class Probabilities</h4>
+        `;
+        
+        for (const [cls, prob] of sorted) {
+            const percent = (prob * 100).toFixed(1);
+            const color = colors[cls] || '#6b7280';
+            
+            html += `
+                <div class="prob-item">
+                    <span class="prob-label">${cls}</span>
+                    <div class="prob-bar">
+                        <div class="prob-fill" style="width: ${percent}%; background: ${color};"></div>
+                    </div>
+                    <span class="prob-value">${percent}%</span>
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+        return html;
+    }
+    
+    function saveToHistory(result) {
+        const entry = {
+            address: result.address,
+            chain: result.chain,
+            predicted_type: result.predicted_type,
+            confidence: result.confidence,
+            timestamp: new Date().toISOString()
+        };
+        
+        classificationHistory.unshift(entry);
+        classificationHistory = classificationHistory.slice(0, 10); // Keep last 10
+        
+        localStorage.setItem('classificationHistory', JSON.stringify(classificationHistory));
+        renderHistory();
+    }
+    
+    function renderHistory() {
+        const container = document.getElementById('historyContainer');
+        
+        if (classificationHistory.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No recent classifications</p>';
+            return;
+        }
+        
+        container.innerHTML = classificationHistory.map(item => `
+            <div class="history-item" onclick="loadFromHistory('${item.address}', '${item.chain}')">
+                <div>
+                    <span class="history-address">${item.address}</span>
+                </div>
+                <div class="history-meta">
+                    <span style="text-transform: capitalize; font-weight: 600; color: var(--text-primary);">
+                        ${item.predicted_type}
+                    </span>
+                    <span>${(item.confidence * 100).toFixed(0)}%</span>
+                    <span>${item.chain}</span>
+                    <span>${new Date(item.timestamp).toLocaleDateString()}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function loadFromHistory(address, chain) {
+        document.getElementById('addressInput').value = address;
+        document.getElementById('chainSelect').value = chain;
+        document.getElementById('classifyForm').dispatchEvent(new Event('submit'));
+    }
+    
+    async function validateClassification(address, originalType, validatedType) {
+        try {
+            const response = await fetch('/api/labels', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    address: address,
+                    label: validatedType === 'confirmed' ? originalType : validatedType,
+                    label_type: validatedType === 'confirmed' ? originalType : validatedType,
+                    source: 'user_validation',
+                    confidence: 1.0,
+                    notes: `Validated by user. Original prediction: ${originalType}`
+                })
+            });
+            
+            if (response.ok) {
+                showNotification('Classification validated! Thank you for helping improve the model.', 'success');
+            } else {
+                showNotification('Validation saved locally', 'info');
+            }
+        } catch (error) {
+            showNotification('Validation saved locally', 'info');
+        }
+    }
+</script>
+{% endblock %}

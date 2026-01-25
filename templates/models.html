@@ -1,0 +1,1111 @@
+{% extends "base.html" %}
+
+{% block title %}ML Models{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+    }
+    
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .page-subtitle {
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+    
+    .btn {
+        padding: 0.75rem 1.25rem;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+        font-size: 0.875rem;
+    }
+    
+    .btn:hover { background: var(--bg-hover); }
+    
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    
+    .btn-primary:hover { background: var(--primary-hover); }
+    
+    .btn-success {
+        background: #22c55e;
+        color: white;
+        border-color: #22c55e;
+    }
+    
+    /* Stats */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+    }
+    
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    /* Tabs */
+    .tabs {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 1rem;
+    }
+    
+    .tab {
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        color: var(--text-secondary);
+        transition: all 0.2s;
+    }
+    
+    .tab:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+    
+    .tab.active {
+        background: var(--primary);
+        color: white;
+    }
+    
+    .tab-content {
+        display: none;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    /* Card */
+    .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+    
+    .card-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .card-title {
+        font-weight: 600;
+        font-size: 1.125rem;
+    }
+    
+    .card-body {
+        padding: 1.25rem;
+    }
+    
+    /* Models Table */
+    .models-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .models-table th,
+    .models-table td {
+        padding: 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .models-table th {
+        background: var(--bg-secondary);
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    
+    .models-table tbody tr:hover {
+        background: var(--bg-hover);
+    }
+    
+    .model-name {
+        font-weight: 600;
+        color: var(--primary);
+    }
+    
+    .version-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.5rem;
+        background: var(--bg-secondary);
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .status-production {
+        background: #dcfce7;
+        color: #166534;
+    }
+    
+    .status-staging {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    
+    .status-archived {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+    
+    .status-none {
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+    }
+    
+    /* Metrics */
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+    }
+    
+    .metric-item {
+        text-align: center;
+        padding: 1rem;
+        background: var(--bg-secondary);
+        border-radius: 8px;
+    }
+    
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    
+    .metric-value.good { color: #22c55e; }
+    .metric-value.warning { color: #f59e0b; }
+    .metric-value.bad { color: #ef4444; }
+    
+    .metric-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    /* Experiments */
+    .experiment-card {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s;
+    }
+    
+    .experiment-card:hover {
+        border-color: var(--primary);
+    }
+    
+    .experiment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.75rem;
+    }
+    
+    .experiment-name {
+        font-weight: 600;
+    }
+    
+    .experiment-date {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+    
+    .experiment-metrics {
+        display: flex;
+        gap: 1.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .experiment-metric {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .experiment-metric-label {
+        color: var(--text-secondary);
+    }
+    
+    /* Drift Panel */
+    .drift-status {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    
+    .drift-status.ok {
+        background: #dcfce7;
+        border: 1px solid #22c55e;
+    }
+    
+    .drift-status.warning {
+        background: #fef3c7;
+        border: 1px solid #f59e0b;
+    }
+    
+    .drift-status.critical {
+        background: #fee2e2;
+        border: 1px solid #ef4444;
+    }
+    
+    .drift-icon {
+        font-size: 2rem;
+    }
+    
+    .drift-text h4 {
+        margin: 0 0 0.25rem 0;
+    }
+    
+    .drift-text p {
+        margin: 0;
+        font-size: 0.875rem;
+        opacity: 0.8;
+    }
+    
+    .drift-features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .drift-feature {
+        padding: 0.75rem;
+        background: var(--bg-secondary);
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .drift-feature.drifted {
+        background: #fef3c7;
+    }
+    
+    /* Training Config */
+    .config-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    
+    .config-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .config-item label {
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+    
+    .config-item input,
+    .config-item select {
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+    }
+    
+    /* Modal */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-overlay.active {
+        display: flex;
+    }
+    
+    .modal {
+        background: var(--card-bg);
+        border-radius: 12px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .modal-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-title {
+        font-weight: 600;
+        font-size: 1.125rem;
+    }
+    
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--text-secondary);
+    }
+    
+    .modal-body {
+        padding: 1.25rem;
+    }
+    
+    .modal-footer {
+        padding: 1rem 1.25rem;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+    
+    /* Feature Importance */
+    .importance-bar {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .importance-label {
+        width: 180px;
+        font-size: 0.875rem;
+    }
+    
+    .importance-track {
+        flex: 1;
+        height: 20px;
+        background: var(--bg-secondary);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .importance-fill {
+        height: 100%;
+        background: var(--primary);
+        border-radius: 4px;
+    }
+    
+    .importance-value {
+        width: 60px;
+        text-align: right;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+    
+    /* Loading */
+    .loading {
+        text-align: center;
+        padding: 3rem;
+    }
+    
+    .spinner {
+        display: inline-block;
+        width: 32px;
+        height: 32px;
+        border: 4px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">🤖 ML Models</h1>
+        <p class="page-subtitle">Model management, training, and monitoring</p>
+    </div>
+    <div class="header-actions">
+        <a href="/mlflow" target="_blank" class="btn">
+            📊 Open MLflow
+        </a>
+        <button class="btn" onclick="checkDrift()">
+            🔍 Check Drift
+        </button>
+        <button class="btn-primary btn" onclick="openTrainModal()">
+            ➕ Train New Model
+        </button>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value" id="statTotalModels">-</div>
+        <div class="stat-label">Total Models</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="statProductionModels">-</div>
+        <div class="stat-label">In Production</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="statAvgAccuracy">-</div>
+        <div class="stat-label">Avg Accuracy</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="statDriftStatus">-</div>
+        <div class="stat-label">Drift Status</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="statLastTrained">-</div>
+        <div class="stat-label">Last Trained</div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <div class="tab active" onclick="switchTab('models')">📦 Models</div>
+    <div class="tab" onclick="switchTab('experiments')">🧪 Experiments</div>
+    <div class="tab" onclick="switchTab('drift')">📈 Data Drift</div>
+    <div class="tab" onclick="switchTab('importance')">🎯 Feature Importance</div>
+    <div class="tab" onclick="switchTab('thresholds')">⚙️ Thresholds</div>
+</div>
+
+<!-- Models Tab -->
+<div id="tab-models" class="tab-content active">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Registered Models</span>
+        </div>
+        <table class="models-table">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Version</th>
+                    <th>Stage</th>
+                    <th>Accuracy</th>
+                    <th>F1 Score</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="modelsTableBody">
+                <tr>
+                    <td colspan="7" class="loading">
+                        <div class="spinner"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Experiments Tab -->
+<div id="tab-experiments" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Recent Training Runs</span>
+            <button class="btn" onclick="loadExperiments()">🔄 Refresh</button>
+        </div>
+        <div class="card-body" id="experimentsContainer">
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Drift Tab -->
+<div id="tab-drift" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Data Drift Monitoring</span>
+            <button class="btn" onclick="checkDrift()">🔄 Refresh</button>
+        </div>
+        <div class="card-body" id="driftContainer">
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feature Importance Tab -->
+<div id="tab-importance" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">SHAP Feature Importance</span>
+        </div>
+        <div class="card-body" id="importanceContainer">
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Thresholds Tab -->
+<div id="tab-thresholds" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Classification Thresholds</span>
+        </div>
+        <div class="card-body">
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                Configure confidence thresholds for automatic classification decisions.
+            </p>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>High Confidence Threshold</label>
+                    <input type="number" id="thresholdHigh" value="0.85" min="0" max="1" step="0.01">
+                    <small style="color: var(--text-secondary);">Auto-approve classifications above this</small>
+                </div>
+                <div class="config-item">
+                    <label>Low Confidence Threshold</label>
+                    <input type="number" id="thresholdLow" value="0.60" min="0" max="1" step="0.01">
+                    <small style="color: var(--text-secondary);">Require review below this</small>
+                </div>
+                <div class="config-item">
+                    <label>Drift Alert Threshold</label>
+                    <input type="number" id="thresholdDrift" value="0.10" min="0" max="1" step="0.01">
+                    <small style="color: var(--text-secondary);">Alert when feature drift exceeds this</small>
+                </div>
+                <div class="config-item">
+                    <label>Retrain Trigger</label>
+                    <select id="retrainTrigger">
+                        <option value="manual">Manual Only</option>
+                        <option value="drift">On Drift Detection</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 1.5rem;">
+                <button class="btn btn-primary" onclick="saveThresholds()">💾 Save Thresholds</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Train Modal -->
+<div class="modal-overlay" id="trainModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">🎯 Train New Model</span>
+            <button class="modal-close" onclick="closeTrainModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>Model Type</label>
+                    <select id="trainModelType">
+                        <option value="xgboost">XGBoost</option>
+                        <option value="random_forest">Random Forest</option>
+                        <option value="gradient_boosting">Gradient Boosting</option>
+                        <option value="lightgbm">LightGBM</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label>Chain Filter</label>
+                    <select id="trainChain">
+                        <option value="">All Chains</option>
+                        <option value="ETH">Ethereum</option>
+                        <option value="POL">Polygon</option>
+                        <option value="BSC">BSC</option>
+                        <option value="BASE">Base</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label>Token Filter</label>
+                    <input type="text" id="trainToken" placeholder="Optional: GHST, USDT...">
+                </div>
+                <div class="config-item">
+                    <label>Test Size</label>
+                    <input type="number" id="trainTestSize" value="0.2" min="0.1" max="0.5" step="0.05">
+                </div>
+                <div class="config-item" style="grid-column: span 2;">
+                    <label>
+                        <input type="checkbox" id="trainUseSmote" checked>
+                        Use SMOTE for class balancing
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeTrainModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="startTraining()">🚀 Start Training</button>
+        </div>
+    </div>
+</div>
+
+<!-- Promote Modal -->
+<div class="modal-overlay" id="promoteModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">🚀 Promote Model</span>
+            <button class="modal-close" onclick="closePromoteModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p>Select the stage to promote the model to:</p>
+            <input type="hidden" id="promoteModelName">
+            <input type="hidden" id="promoteModelVersion">
+            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                <button class="btn" style="flex:1" onclick="promoteModel('Staging')">
+                    🧪 Staging
+                </button>
+                <button class="btn btn-success" style="flex:1" onclick="promoteModel('Production')">
+                    🚀 Production
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Tab switching
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        
+        event.target.classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+        
+        // Load data for tab
+        if (tabName === 'experiments') loadExperiments();
+        if (tabName === 'drift') loadDriftData();
+        if (tabName === 'importance') loadFeatureImportance();
+    }
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        loadModels();
+        loadStats();
+    });
+    
+    async function loadStats() {
+        try {
+            const response = await fetch('/api/ml/stats');
+            if (response.ok) {
+                const data = await response.json();
+                document.getElementById('statTotalModels').textContent = data.total_models || '0';
+                document.getElementById('statProductionModels').textContent = data.production_models || '0';
+                document.getElementById('statAvgAccuracy').textContent = data.avg_accuracy ? 
+                    (data.avg_accuracy * 100).toFixed(1) + '%' : 'N/A';
+                document.getElementById('statDriftStatus').textContent = data.drift_status || 'OK';
+                document.getElementById('statLastTrained').textContent = data.last_trained || 'Never';
+            }
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+    
+    async function loadModels() {
+        try {
+            const response = await fetch('/api/ml/models');
+            const tbody = document.getElementById('modelsTableBody');
+            
+            if (!response.ok) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align:center;padding:2rem;">
+                            <p>No models registered yet.</p>
+                            <button class="btn btn-primary" onclick="openTrainModal()">Train First Model</button>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            const models = await response.json();
+            
+            if (models.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align:center;padding:2rem;">
+                            <p>No models registered yet.</p>
+                            <button class="btn btn-primary" onclick="openTrainModal()">Train First Model</button>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = models.map(m => `
+                <tr>
+                    <td><span class="model-name">${m.name}</span></td>
+                    <td><span class="version-badge">v${m.version}</span></td>
+                    <td>
+                        <span class="status-badge status-${(m.stage || 'none').toLowerCase()}">
+                            ${m.stage || 'None'}
+                        </span>
+                    </td>
+                    <td>${m.accuracy ? (m.accuracy * 100).toFixed(1) + '%' : '-'}</td>
+                    <td>${m.f1_score ? (m.f1_score * 100).toFixed(1) + '%' : '-'}</td>
+                    <td>${m.created ? new Date(m.created).toLocaleDateString() : '-'}</td>
+                    <td>
+                        <button class="btn" style="padding:0.5rem 0.75rem;font-size:0.75rem;" 
+                                onclick="openPromoteModal('${m.name}', '${m.version}')">
+                            🚀 Promote
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            
+        } catch (error) {
+            console.error('Error loading models:', error);
+            document.getElementById('modelsTableBody').innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;color:var(--danger);">
+                        Error loading models
+                    </td>
+                </tr>
+            `;
+        }
+    }
+    
+    async function loadExperiments() {
+        try {
+            const response = await fetch('/api/ml/experiments');
+            const container = document.getElementById('experimentsContainer');
+            
+            if (!response.ok) {
+                container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);">No experiments found</p>';
+                return;
+            }
+            
+            const experiments = await response.json();
+            
+            if (experiments.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);">No experiments found</p>';
+                return;
+            }
+            
+            container.innerHTML = experiments.map(exp => `
+                <div class="experiment-card">
+                    <div class="experiment-header">
+                        <div>
+                            <div class="experiment-name">${exp.run_name || exp.run_id}</div>
+                            <div style="font-size:0.75rem;color:var(--text-secondary);">
+                                ${exp.model_type || 'Unknown'} • ${exp.run_id}
+                            </div>
+                        </div>
+                        <span class="experiment-date">${exp.start_time ? new Date(exp.start_time).toLocaleString() : '-'}</span>
+                    </div>
+                    <div class="experiment-metrics">
+                        <div class="experiment-metric">
+                            <span class="experiment-metric-label">Accuracy:</span>
+                            <span>${exp.accuracy ? (exp.accuracy * 100).toFixed(1) + '%' : '-'}</span>
+                        </div>
+                        <div class="experiment-metric">
+                            <span class="experiment-metric-label">F1:</span>
+                            <span>${exp.f1_score ? (exp.f1_score * 100).toFixed(1) + '%' : '-'}</span>
+                        </div>
+                        <div class="experiment-metric">
+                            <span class="experiment-metric-label">Samples:</span>
+                            <span>${exp.n_samples || '-'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+        } catch (error) {
+            console.error('Error loading experiments:', error);
+        }
+    }
+    
+    async function loadDriftData() {
+        const container = document.getElementById('driftContainer');
+        container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+        
+        try {
+            const response = await fetch('/api/ml/drift');
+            
+            if (!response.ok) {
+                container.innerHTML = `
+                    <div class="drift-status ok">
+                        <div class="drift-icon">✅</div>
+                        <div class="drift-text">
+                            <h4>No Drift Detected</h4>
+                            <p>Run drift check to analyze current data distribution</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="checkDrift()">🔍 Run Drift Check</button>
+                `;
+                return;
+            }
+            
+            const drift = await response.json();
+            
+            const statusClass = drift.drift_detected ? 
+                (drift.drift_score > 0.3 ? 'critical' : 'warning') : 'ok';
+            const statusIcon = drift.drift_detected ? '⚠️' : '✅';
+            const statusText = drift.drift_detected ? 'Drift Detected' : 'No Drift Detected';
+            
+            let html = `
+                <div class="drift-status ${statusClass}">
+                    <div class="drift-icon">${statusIcon}</div>
+                    <div class="drift-text">
+                        <h4>${statusText}</h4>
+                        <p>Overall drift score: ${(drift.drift_score * 100).toFixed(1)}%</p>
+                    </div>
+                </div>
+            `;
+            
+            if (drift.feature_drift) {
+                html += '<h4 style="margin: 1.5rem 0 1rem;">Feature Drift Details</h4>';
+                html += '<div class="drift-features">';
+                
+                for (const [feature, drifted] of Object.entries(drift.feature_drift)) {
+                    html += `
+                        <div class="drift-feature ${drifted ? 'drifted' : ''}">
+                            <span>${feature}</span>
+                            <span style="font-weight:600;">${drifted ? '⚠️ Drifted' : '✓ OK'}</span>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+            }
+            
+            container.innerHTML = html;
+            
+        } catch (error) {
+            console.error('Error loading drift data:', error);
+            container.innerHTML = '<p style="color:var(--danger);">Error loading drift data</p>';
+        }
+    }
+    
+    async function loadFeatureImportance() {
+        const container = document.getElementById('importanceContainer');
+        container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+        
+        try {
+            const response = await fetch('/api/ml/feature-importance');
+            
+            if (!response.ok) {
+                container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);">Train a model to see feature importance</p>';
+                return;
+            }
+            
+            const data = await response.json();
+            const maxImportance = Math.max(...Object.values(data.importance));
+            
+            let html = '<p style="color:var(--text-secondary);margin-bottom:1.5rem;">SHAP-based feature importance from the production model</p>';
+            
+            const sorted = Object.entries(data.importance)
+                .sort((a, b) => b[1] - a[1]);
+            
+            for (const [feature, importance] of sorted) {
+                const widthPercent = (importance / maxImportance) * 100;
+                html += `
+                    <div class="importance-bar">
+                        <span class="importance-label">${feature}</span>
+                        <div class="importance-track">
+                            <div class="importance-fill" style="width: ${widthPercent}%;"></div>
+                        </div>
+                        <span class="importance-value">${importance.toFixed(4)}</span>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+            
+        } catch (error) {
+            console.error('Error loading feature importance:', error);
+            container.innerHTML = '<p style="color:var(--danger);">Error loading feature importance</p>';
+        }
+    }
+    
+    async function checkDrift() {
+        showNotification('Checking for data drift...', 'info');
+        
+        try {
+            const response = await fetch('/api/ml/check-drift', { method: 'POST' });
+            
+            if (response.ok) {
+                const result = await response.json();
+                showNotification(
+                    result.drift_detected ? 'Data drift detected!' : 'No significant drift detected',
+                    result.drift_detected ? 'warning' : 'success'
+                );
+                
+                // Refresh drift tab
+                loadDriftData();
+                document.getElementById('statDriftStatus').textContent = 
+                    result.drift_detected ? 'DRIFT' : 'OK';
+            }
+        } catch (error) {
+            showNotification('Error checking drift', 'error');
+        }
+    }
+    
+    // Training Modal
+    function openTrainModal() {
+        document.getElementById('trainModal').classList.add('active');
+    }
+    
+    function closeTrainModal() {
+        document.getElementById('trainModal').classList.remove('active');
+    }
+    
+    async function startTraining() {
+        const modelType = document.getElementById('trainModelType').value;
+        const chain = document.getElementById('trainChain').value;
+        const token = document.getElementById('trainToken').value;
+        const testSize = parseFloat(document.getElementById('trainTestSize').value);
+        const useSmote = document.getElementById('trainUseSmote').checked;
+        
+        closeTrainModal();
+        showNotification('Training started... This may take a few minutes.', 'info');
+        
+        try {
+            const response = await fetch('/api/ml/train', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model_type: modelType,
+                    chain: chain || null,
+                    token: token || null,
+                    test_size: testSize,
+                    use_smote: useSmote
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                showNotification(`Training completed! Accuracy: ${(result.accuracy * 100).toFixed(1)}%`, 'success');
+                loadModels();
+                loadStats();
+            } else {
+                const error = await response.json();
+                showNotification(`Training failed: ${error.error || 'Unknown error'}`, 'error');
+            }
+        } catch (error) {
+            showNotification('Error starting training', 'error');
+        }
+    }
+    
+    // Promote Modal
+    function openPromoteModal(modelName, version) {
+        document.getElementById('promoteModelName').value = modelName;
+        document.getElementById('promoteModelVersion').value = version;
+        document.getElementById('promoteModal').classList.add('active');
+    }
+    
+    function closePromoteModal() {
+        document.getElementById('promoteModal').classList.remove('active');
+    }
+    
+    async function promoteModel(stage) {
+        const modelName = document.getElementById('promoteModelName').value;
+        const version = document.getElementById('promoteModelVersion').value;
+        
+        closePromoteModal();
+        
+        try {
+            const response = await fetch('/api/ml/promote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model_name: modelName,
+                    version: version,
+                    stage: stage
+                })
+            });
+            
+            if (response.ok) {
+                showNotification(`Model promoted to ${stage}!`, 'success');
+                loadModels();
+            } else {
+                showNotification('Failed to promote model', 'error');
+            }
+        } catch (error) {
+            showNotification('Error promoting model', 'error');
+        }
+    }
+    
+    function saveThresholds() {
+        const thresholds = {
+            high: parseFloat(document.getElementById('thresholdHigh').value),
+            low: parseFloat(document.getElementById('thresholdLow').value),
+            drift: parseFloat(document.getElementById('thresholdDrift').value),
+            retrain: document.getElementById('retrainTrigger').value
+        };
+        
+        localStorage.setItem('mlThresholds', JSON.stringify(thresholds));
+        showNotification('Thresholds saved!', 'success');
+    }
+</script>
+{% endblock %}
