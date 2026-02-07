@@ -3,7 +3,8 @@
 {% block title %}{% if investigation_id %}Case Graph{% else %}Transaction Graph{% endif %}{% endblock %}
 
 {% block extra_css %}
-<script src="https://unpkg.com/vis-network@9.1.2/standalone/umd/vis-network.min.js"></script>
+<!-- G6 v5 – GPU-accelerated graph engine by Ant Group (MIT) -->
+<script src="https://unpkg.com/@antv/g6@5/dist/g6.min.js"></script>
 <style>
     .investigation-header {
         margin-bottom: 1.5rem;
@@ -29,6 +30,14 @@
         font-size: 0.9rem;
         margin-top: 0.25rem;
     }
+    /* G6 toolbar */
+    .g6-toolbar { display: flex; gap: 0.25rem; align-items: center; }
+    .g6-toolbar button {
+        background: var(--bg-tertiary, #1e293b); border: 1px solid var(--border); border-radius: 4px;
+        color: var(--text-secondary); padding: 4px 10px; font-size: 0.8rem; cursor: pointer;
+    }
+    .g6-toolbar button:hover { background: var(--primary); color: #fff; }
+    .g6-toolbar button.active { background: var(--primary); color: #fff; }
 </style>
 {% endblock %}
 
@@ -72,6 +81,9 @@
         <button onclick="toggleLayout()" class="btn btn-secondary" id="layout-toggle-btn" title="Switch between flow and force layout">
             ⇄ Layout
         </button>
+        <button onclick="toggleCombos()" class="btn btn-secondary" id="combo-toggle-btn" title="Toggle role-based grouping">
+            ◎ Combos
+        </button>
         <button onclick="exportGraph()" class="btn btn-secondary">
             Export
         </button>
@@ -80,7 +92,7 @@
 {% else %}
 <div class="page-header">
     <h1 class="page-title">Transaction Flow Graph</h1>
-    <p class="page-subtitle">Visualize token transfer patterns • Powered by GraphQL API</p>
+    <p class="page-subtitle">Visualize token transfer patterns • Powered by G6 v5 + GraphQL API</p>
 </div>
 {% endif %}
 
@@ -137,6 +149,8 @@
             </svg>
             Export
         </button>
+        <button onclick="toggleLayout()" class="btn btn-secondary" title="Switch layout">⇄ Layout</button>
+        <button onclick="toggleCombos()" class="btn btn-secondary" title="Toggle grouping">◎ Combos</button>
     </div>
 </div>
 
@@ -226,216 +240,355 @@
 
 {% block extra_js %}
 <script>
-    let network = null;
-    let nodes = new vis.DataSet([]);
-    let edges = new vis.DataSet([]);
-    let currentLayout = 'flow'; // 'flow' or 'force'
-    
-    // Initialize the network graph
-    function initGraph() {
-        const container = document.getElementById('network-graph');
-        
-        const data = { nodes: nodes, edges: edges };
-        
-        const options = getNetworkOptions(currentLayout);
-        
-        network = new vis.Network(container, data, options);
-        
-        network.on('click', function(params) {
-            if (params.nodes.length > 0) {
-                // Use investigation-specific handler if rawGraphData exists
-                if (rawGraphData) {
-                    showInvestigationNodeDetails(params.nodes[0]);
-                } else {
-                    showNodeDetails(params.nodes[0]);
-                }
-            }
-        });
-        
-        network.on('hoverNode', function() {
-            network.canvas.body.container.style.cursor = 'pointer';
-        });
-        
-        network.on('blurNode', function() {
-            network.canvas.body.container.style.cursor = 'default';
-        });
+    /* ================================================================
+     *  G6 v5 – Transaction Flow / Investigation Graph
+     *  Replaces vis-network  – MIT licensed, Ant Group
+     *  Features: Combos (role grouping), Minimap, Tooltip, Legend,
+     *            Dagre LR + Force layouts, collapse/expand, 60K+ elems
+     * ================================================================ */
+
+    const { Graph } = G6;
+
+    let graph = null;
+    let currentLayout = 'flow';   // 'flow' (dagre LR) or 'force'
+    let combosEnabled = false;    // role-based combo grouping
+    let rawGraphData = null;
+    let currentInvestigationId = null;
+
+    // ── Role colour palette ────────────────────────────────────────
+    const ROLE_COLORS = {
+        'attacker':     '#ef4444', 'suspect':  '#ef4444', 'hacker':   '#ef4444',
+        'victim':       '#22c55e', 'theft_origin': '#22c55e',
+        'exchange':     '#a855f7', 'cex':      '#a855f7', 'dex':      '#a855f7',
+        'mixer':        '#f59e0b', 'tornado':  '#f59e0b', 'tumbler':  '#f59e0b',
+        'bridge':       '#06b6d4',
+        'related':      '#6366f1',
+        'external':     '#475569',
+    };
+    const ROLE_GROUPS = {
+        'attacker': 'attacker', 'suspect': 'attacker', 'hacker': 'attacker',
+        'victim': 'victim', 'theft_origin': 'victim',
+        'exchange': 'exchange', 'cex': 'exchange', 'dex': 'exchange',
+        'mixer': 'mixer', 'tornado': 'mixer', 'tumbler': 'mixer',
+        'bridge': 'bridge',
+        'related': 'related',
+        'external': 'external',
+    };
+    const COMBO_LABELS = {
+        'attacker': '🔴 Attackers',  'victim': '🟢 Victims',
+        'exchange': '🟣 Exchanges',  'mixer': '🟠 Mixers',
+        'bridge': '🔵 Bridges',      'related': '🟤 Related',
+        'external': '⚫ External',
+    };
+    const COMBO_FILLS = {
+        'attacker': 'rgba(239,68,68,0.08)',   'victim': 'rgba(34,197,94,0.08)',
+        'exchange': 'rgba(168,85,247,0.08)',   'mixer': 'rgba(245,158,11,0.08)',
+        'bridge': 'rgba(6,182,212,0.08)',      'related': 'rgba(99,102,241,0.06)',
+        'external': 'rgba(71,85,105,0.05)',
+    };
+
+    function roleColor(role) {
+        return ROLE_COLORS[(role || '').toLowerCase()] || ROLE_COLORS['external'];
     }
-    
-    function getNetworkOptions(layout) {
-        const baseOptions = {
-            nodes: {
-                shape: 'dot',
-                size: 16,
-                font: { size: 11, color: '#94a3b8', face: 'Inter, sans-serif' },
-                borderWidth: 2,
-                shadow: { enabled: true, color: 'rgba(0,0,0,0.3)', size: 6, x: 0, y: 2 },
-                chosen: {
-                    node: function(values) {
-                        values.size = values.size * 1.3;
-                        values.shadowSize = 12;
-                    }
-                }
-            },
-            edges: {
-                width: 1.5,
-                arrows: { to: { enabled: true, scaleFactor: 0.4, type: 'arrow' } },
-                smooth: { type: 'continuous', roundness: 0.15 },
-                color: { color: 'rgba(100, 100, 140, 0.35)', highlight: '#6366f1', hover: '#8b5cf6' },
-                hoverWidth: 0.5
-            },
-            interaction: {
-                hover: true,
-                tooltipDelay: 150,
-                hideEdgesOnDrag: true,
-                hideEdgesOnZoom: true,
-                multiselect: true,
-                navigationButtons: false,
-                keyboard: { enabled: true }
-            }
-        };
-        
-        if (layout === 'flow') {
-            // Hierarchical left-to-right: victim(left) → money flow → sink(right)
-            baseOptions.layout = {
-                hierarchical: {
-                    enabled: true,
-                    direction: 'LR',
-                    sortMethod: 'directed',
-                    levelSeparation: 220,
-                    nodeSpacing: 30,
-                    treeSpacing: 60,
-                    blockShifting: true,
-                    edgeMinimization: true,
-                    parentCentralization: true
-                }
-            };
-            baseOptions.physics = {
-                enabled: true,
-                hierarchicalRepulsion: {
-                    centralGravity: 0.0,
-                    springLength: 180,
-                    springConstant: 0.01,
-                    nodeDistance: 140,
-                    damping: 0.09,
-                    avoidOverlap: 0.5
-                },
-                stabilization: { enabled: true, iterations: 400, updateInterval: 25 },
-                maxVelocity: 30,
-                minVelocity: 0.75
-            };
-            baseOptions.edges.smooth = { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 };
-        } else {
-            // Force-directed (original)
-            baseOptions.physics = {
-                enabled: true,
-                solver: 'forceAtlas2Based',
-                forceAtlas2Based: {
-                    gravitationalConstant: -120,
-                    centralGravity: 0.008,
-                    springLength: 100,
-                    springConstant: 0.08,
-                    damping: 0.5,
-                    avoidOverlap: 0.3
-                },
-                stabilization: { enabled: true, iterations: 300, updateInterval: 25 },
-                maxVelocity: 50,
-                minVelocity: 0.75
-            };
-            baseOptions.layout = { improvedLayout: true };
+    function roleGroup(role) {
+        return ROLE_GROUPS[(role || '').toLowerCase()] || 'external';
+    }
+
+    // ── Explorer links ─────────────────────────────────────────────
+    const EXPLORERS = {
+        'ETH': 'https://etherscan.io',     'POL': 'https://polygonscan.com',
+        'BSC': 'https://bscscan.com',      'BASE': 'https://basescan.org',
+        'ARB': 'https://arbiscan.io',      'OP': 'https://optimistic.etherscan.io',
+        'AVAX': 'https://snowtrace.io',    'FTM': 'https://ftmscan.com',
+    };
+
+    // ── Formatters ─────────────────────────────────────────────────
+    function formatVolume(num) {
+        if (num === null || num === undefined || isNaN(num)) return '0';
+        if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+        if (num >= 1e9)  return (num / 1e9).toFixed(2) + 'B';
+        if (num >= 1e6)  return (num / 1e6).toFixed(2) + 'M';
+        if (num >= 1e3)  return (num / 1e3).toFixed(2) + 'K';
+        return num.toFixed(2);
+    }
+
+    // ── Build layout config ────────────────────────────────────────
+    function getLayoutConfig() {
+        if (currentLayout === 'flow') {
+            return combosEnabled
+                ? { type: 'combo-combined', outerLayout: { type: 'dagre', rankdir: 'LR', nodesep: 30, ranksep: 180 }, innerLayout: { type: 'grid', rows: 4 }, comboPadding: 20 }
+                : { type: 'antv-dagre', rankdir: 'LR', nodesep: 30, ranksep: 180 };
         }
-        
-        return baseOptions;
+        return combosEnabled
+            ? { type: 'combo-combined', outerLayout: { type: 'd3-force' }, innerLayout: { type: 'grid' }, comboPadding: 20 }
+            : { type: 'd3-force', manyBody: { strength: -120 }, link: { distance: 100 } };
     }
-    
+
+    // ── Create / recreate graph ────────────────────────────────────
+    function createGraph(g6Data) {
+        if (graph) { graph.destroy(); graph = null; }
+
+        const container = document.getElementById('network-graph');
+        if (!container) return;
+
+        graph = new Graph({
+            container: 'network-graph',
+            autoFit: 'view',
+            padding: [20, 20, 20, 20],
+            data: g6Data,
+            theme: 'dark',
+
+            node: {
+                type: 'circle',
+                style: (d) => {
+                    const data = d.data || {};
+                    const role = (data.role || 'external').toLowerCase();
+                    const vol = data._volume || 0;
+                    const deg = data._degree || 0;
+                    const isCaseWallet = data.is_case_wallet;
+                    const baseSize = 8 + Math.log10(Math.max(vol, 1)) * 4;
+                    const size = Math.max(10, Math.min(baseSize, 50));
+                    const showLabel = isCaseWallet || deg > 8;
+
+                    return {
+                        size,
+                        fill: roleColor(role),
+                        stroke: isCaseWallet ? '#f8fafc' : roleColor(role),
+                        lineWidth: isCaseWallet ? 3 : 1.5,
+                        shadowColor: isCaseWallet ? roleColor(role) : 'transparent',
+                        shadowBlur: isCaseWallet ? 16 : 0,
+                        labelText: showLabel ? (data._label || '') : '',
+                        labelFill: '#94a3b8',
+                        labelFontSize: 10,
+                        labelFontFamily: 'Inter, sans-serif',
+                        labelPlacement: 'bottom',
+                        labelOffsetY: 4,
+                        cursor: 'pointer',
+                    };
+                },
+                state: {
+                    selected: { stroke: '#f8fafc', lineWidth: 3, shadowBlur: 20 },
+                    highlight: { stroke: '#f8fafc', lineWidth: 2 },
+                },
+            },
+
+            edge: {
+                type: currentLayout === 'flow' ? 'cubic-horizontal' : 'line',
+                style: (d) => {
+                    const data = d.data || {};
+                    const val = data.value || 0;
+                    const w = 0.5 + Math.log10(Math.max(val, 1)) * 0.5;
+                    return {
+                        lineWidth: Math.max(0.5, Math.min(w, 6)),
+                        stroke: 'rgba(100, 100, 140, 0.3)',
+                        endArrow: true,
+                        endArrowSize: 6,
+                        cursor: 'pointer',
+                    };
+                },
+                state: {
+                    highlight: { stroke: '#6366f1', lineWidth: 2.5 },
+                },
+            },
+
+            combo: {
+                type: 'rect',
+                style: (d) => {
+                    const grp = d.id || '';
+                    return {
+                        fill: COMBO_FILLS[grp] || 'rgba(71,85,105,0.05)',
+                        stroke: ROLE_COLORS[grp] || '#475569',
+                        lineWidth: 1,
+                        lineDash: [4, 4],
+                        radius: 12,
+                        padding: 16,
+                        labelText: COMBO_LABELS[grp] || grp,
+                        labelFill: '#94a3b8',
+                        labelFontSize: 11,
+                        labelFontFamily: 'Inter, sans-serif',
+                        labelPlacement: 'top',
+                        collapsedMarker: true,
+                        collapsedMarkerType: 'child-count',
+                    };
+                },
+            },
+
+            layout: getLayoutConfig(),
+
+            behaviors: [
+                'drag-canvas',
+                'zoom-canvas',
+                'drag-element',
+                { type: 'collapse-expand', trigger: 'dblclick' },
+                'click-select',
+            ],
+
+            plugins: [
+                {
+                    type: 'minimap', key: 'minimap',
+                    size: [180, 120], position: 'right-bottom',
+                },
+                {
+                    type: 'tooltip', key: 'node-tooltip',
+                    trigger: 'pointerenter',
+                    enable: (e) => e.targetType === 'node',
+                    getContent: (e, items) => {
+                        const d = items[0]?.data || {};
+                        const role = (d.role || 'external').toLowerCase();
+                        const vol = formatVolume(d._volume || 0);
+                        const deg = d._degree || 0;
+                        const caseTag = d.is_case_wallet ? '<b style="color:#ff6b6b;">⚠ CASE WALLET</b><br>' : '';
+                        return `<div style="max-width:320px;font-size:12px;font-family:Inter,sans-serif;">
+                            ${caseTag}<b>${items[0].id}</b><br>
+                            Role: <span style="color:${roleColor(role)}">${role}</span><br>
+                            Volume: ${vol} · Connections: ${deg}
+                        </div>`;
+                    },
+                    style: { '.tooltip': { background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '8px 12px', color: '#e2e8f0' } },
+                },
+                {
+                    type: 'tooltip', key: 'edge-tooltip',
+                    trigger: 'pointerenter',
+                    enable: (e) => e.targetType === 'edge',
+                    getContent: (e, items) => {
+                        const d = items[0]?.data || {};
+                        return `<div style="max-width:280px;font-size:12px;font-family:Inter,sans-serif;">
+                            <b>${formatVolume(d.value || 0)} ${d.token || ''}</b><br>
+                            Tx: ${(d.hash || '').substring(0, 16)}…
+                        </div>`;
+                    },
+                    style: { '.tooltip': { background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '8px 12px', color: '#e2e8f0' } },
+                },
+            ],
+            animation: true,
+        });
+
+        // ── Node click → detail panel ──────────────────────────────
+        graph.on('node:click', (e) => {
+            const nodeId = e.target.id;
+            if (rawGraphData) showInvestigationNodeDetails(nodeId);
+            else showNodeDetails(nodeId);
+        });
+
+        graph.render();
+    }
+
+    // ── Convert backend data → G6 data ─────────────────────────────
+    function toG6Data(graphData) {
+        // Pre-compute metrics
+        const nodeVolume = {}, nodeInDeg = {}, nodeOutDeg = {};
+        graphData.edges.forEach(e => {
+            const val = e.value || 0;
+            nodeVolume[e.from] = (nodeVolume[e.from] || 0) + val;
+            nodeVolume[e.to]   = (nodeVolume[e.to]   || 0) + val;
+            nodeOutDeg[e.from] = (nodeOutDeg[e.from]  || 0) + 1;
+            nodeInDeg[e.to]    = (nodeInDeg[e.to]     || 0) + 1;
+        });
+
+        // Nodes
+        const usedCombos = new Set();
+        const g6Nodes = graphData.nodes.map(n => {
+            const role = (n.role || 'external').toLowerCase();
+            const grp = roleGroup(role);
+            const vol = nodeVolume[n.id] || 0;
+            const deg = (nodeInDeg[n.id] || 0) + (nodeOutDeg[n.id] || 0);
+            const isCaseWallet = n.is_case_wallet;
+
+            let label = '';
+            if (isCaseWallet) label = n.label + ' (' + role + ')';
+            else if (deg > 8) label = n.label;
+
+            if (combosEnabled) usedCombos.add(grp);
+
+            return {
+                id: n.id,
+                data: { ...n, _volume: vol, _degree: deg, _label: label },
+                ...(combosEnabled ? { combo: grp } : {}),
+            };
+        });
+
+        // Edges – G6 uses source/target
+        const g6Edges = graphData.edges.map((e, idx) => ({
+            id: `edge-${idx}`,
+            source: e.from,
+            target: e.to,
+            data: { value: e.value, token: e.token, chain: e.chain, hash: e.hash, timestamp: e.timestamp, blockNumber: e.blockNumber },
+        }));
+
+        // Combos (only when enabled)
+        const g6Combos = combosEnabled
+            ? Array.from(usedCombos).map(grp => ({ id: grp, data: { label: COMBO_LABELS[grp] || grp } }))
+            : [];
+
+        return { nodes: g6Nodes, edges: g6Edges, combos: g6Combos };
+    }
+
+    // ── Render investigation graph ──────────────────────────────────
+    function renderInvestigationGraph(graphData) {
+        if (!graphData.nodes || graphData.nodes.length === 0) {
+            showNotification('No transfer data. Run "Sync Transfers" first.', 'warning');
+            return;
+        }
+
+        const g6Data = toG6Data(graphData);
+        createGraph(g6Data);
+
+        // Update stats
+        document.getElementById('node-count').textContent = graphData.nodes.length.toLocaleString();
+        document.getElementById('edge-count').textContent = graphData.edges.length.toLocaleString();
+        const totalVolume = graphData.edges.reduce((sum, e) => sum + (e.value || 0), 0);
+        document.getElementById('graph-volume').textContent = formatVolume(totalVolume);
+        document.getElementById('data-source').textContent = 'Investigation Transfers';
+
+        showNotification(`Loaded ${graphData.edges.length} transfers from ${graphData.nodes.length} wallets (${currentLayout}${combosEnabled ? ' + combos' : ''})`, 'success');
+    }
+
+    // ── Layout / Combo toggles ──────────────────────────────────────
     function toggleLayout() {
         currentLayout = (currentLayout === 'flow') ? 'force' : 'flow';
         const btn = document.getElementById('layout-toggle-btn');
         if (btn) btn.textContent = currentLayout === 'flow' ? '⇄ Force' : '⇄ Flow';
-        
-        // Rebuild network with new layout
-        if (network) network.destroy();
-        const container = document.getElementById('network-graph');
-        const options = getNetworkOptions(currentLayout);
-        nodes = new vis.DataSet([]);
-        edges = new vis.DataSet([]);
-        network = new vis.Network(container, { nodes, edges }, options);
-        
-        network.on('click', function(params) {
-            if (params.nodes.length > 0) {
-                if (rawGraphData) showInvestigationNodeDetails(params.nodes[0]);
-                else showNodeDetails(params.nodes[0]);
-            }
-        });
-        network.on('hoverNode', () => network.canvas.body.container.style.cursor = 'pointer');
-        network.on('blurNode', () => network.canvas.body.container.style.cursor = 'default');
-        
-        // Re-render current data
         if (rawGraphData) renderInvestigationGraph(rawGraphData);
     }
-    
+
+    function toggleCombos() {
+        combosEnabled = !combosEnabled;
+        const btn = document.getElementById('combo-toggle-btn');
+        if (btn) {
+            btn.textContent = combosEnabled ? '◎ No Combos' : '◎ Combos';
+            btn.classList.toggle('active', combosEnabled);
+        }
+        if (rawGraphData) renderInvestigationGraph(rawGraphData);
+    }
+
+    // ── Node detail panel (investigation mode) ──────────────────────
     function showInvestigationNodeDetails(nodeId) {
         if (!rawGraphData) return;
-        
+
         const node = rawGraphData.nodes.find(n => n.id === nodeId);
         const detailsDiv = document.getElementById('node-details');
         const infoDiv = document.getElementById('node-info');
-        
-        // Calculate incoming and outgoing from raw data
+
         const incoming = rawGraphData.edges.filter(e => e.to === nodeId);
         const outgoing = rawGraphData.edges.filter(e => e.from === nodeId);
-        
-        // Group by token
-        const inByToken = {};
-        const outByToken = {};
-        
-        incoming.forEach(e => {
-            const t = e.token || 'UNKNOWN';
-            inByToken[t] = (inByToken[t] || 0) + (e.value || 0);
-        });
-        
-        outgoing.forEach(e => {
-            const t = e.token || 'UNKNOWN';
-            outByToken[t] = (outByToken[t] || 0) + (e.value || 0);
-        });
-        
-        // Get all tokens involved
+
+        const inByToken = {}, outByToken = {};
+        incoming.forEach(e => { const t = e.token || 'UNKNOWN'; inByToken[t] = (inByToken[t] || 0) + (e.value || 0); });
+        outgoing.forEach(e => { const t = e.token || 'UNKNOWN'; outByToken[t] = (outByToken[t] || 0) + (e.value || 0); });
+
         const allTokens = new Set([...Object.keys(inByToken), ...Object.keys(outByToken)]);
-        
-        // Build summary
-        let inSummary = Object.entries(inByToken)
-            .map(([t, v]) => `${formatVolume(v)} ${t}`)
-            .join(', ') || 'None';
-        let outSummary = Object.entries(outByToken)
-            .map(([t, v]) => `${formatVolume(v)} ${t}`)
-            .join(', ') || 'None';
-        
-        // Net flow per token
+        let inSummary = Object.entries(inByToken).map(([t, v]) => `${formatVolume(v)} ${t}`).join(', ') || 'None';
+        let outSummary = Object.entries(outByToken).map(([t, v]) => `${formatVolume(v)} ${t}`).join(', ') || 'None';
+
         const netFlow = {};
-        allTokens.forEach(t => {
-            netFlow[t] = (inByToken[t] || 0) - (outByToken[t] || 0);
-        });
-        let netSummary = Object.entries(netFlow)
-            .map(([t, v]) => `${v >= 0 ? '+' : ''}${formatVolume(v)} ${t}`)
-            .join(', ') || '0';
-        
-        // Get chain for explorer link
+        allTokens.forEach(t => { netFlow[t] = (inByToken[t] || 0) - (outByToken[t] || 0); });
+        let netSummary = Object.entries(netFlow).map(([t, v]) => `${v >= 0 ? '+' : ''}${formatVolume(v)} ${t}`).join(', ') || '0';
+
         const firstEdge = [...incoming, ...outgoing][0];
         const chain = firstEdge?.chain || 'ETH';
-        
-        const explorers = {
-            'ETH': 'https://etherscan.io',
-            'POL': 'https://polygonscan.com',
-            'BSC': 'https://bscscan.com',
-            'BASE': 'https://basescan.org',
-            'ARB': 'https://arbiscan.io',
-            'OP': 'https://optimistic.etherscan.io',
-            'AVAX': 'https://snowtrace.io',
-            'FTM': 'https://ftmscan.com'
-        };
-        const explorerUrl = explorers[chain] || 'https://etherscan.io';
-        
+        const explorerUrl = EXPLORERS[chain] || 'https://etherscan.io';
         const isCaseWallet = node?.is_case_wallet;
-        
+
         infoDiv.innerHTML = `
             <p><strong>Address:</strong> <a href="${explorerUrl}/address/${nodeId}" target="_blank" style="color: var(--primary);">${nodeId}</a></p>
             ${isCaseWallet ? '<p><span style="color: #ff6b6b; font-weight: bold;">⚠ Case Wallet</span></p>' : ''}
@@ -443,641 +596,227 @@
             <p><strong>Outgoing:</strong> ${outgoing.length} txs (${outSummary})</p>
             <p><strong>Net Flow:</strong> ${netSummary}</p>
             <p class="mt-md">
-                <a href="${explorerUrl}/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">
-                    View on Explorer
-                </a>
-                <button onclick="addToInvestigation('${nodeId}')" class="btn btn-primary btn-sm">
-                    Investigate
-                </button>
+                <a href="${explorerUrl}/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">View on Explorer</a>
+                <button onclick="addToInvestigation('${nodeId}')" class="btn btn-primary btn-sm">Investigate</button>
             </p>
         `;
-        
         detailsDiv.style.display = 'block';
     }
-    
+
+    // ── Node detail panel (standard mode) ───────────────────────────
+    function showNodeDetails(nodeId) {
+        if (!rawGraphData) return;
+        const detailsDiv = document.getElementById('node-details');
+        const infoDiv = document.getElementById('node-info');
+        const chain = document.getElementById('chain-select')?.value || 'ETH';
+        const explorerUrl = EXPLORERS[chain] || 'https://etherscan.io';
+
+        const incoming = rawGraphData.edges.filter(e => e.to === nodeId);
+        const outgoing = rawGraphData.edges.filter(e => e.from === nodeId);
+        let inVolume = 0, outVolume = 0;
+        incoming.forEach(e => inVolume += e.value || 0);
+        outgoing.forEach(e => outVolume += e.value || 0);
+        const token = document.getElementById('token-select')?.value?.toUpperCase() || 'TOKEN';
+
+        infoDiv.innerHTML = `
+            <p><strong>Address:</strong> <code>${nodeId}</code></p>
+            <p><strong>Incoming:</strong> ${incoming.length} txs (${inVolume.toFixed(2)} ${token})</p>
+            <p><strong>Outgoing:</strong> ${outgoing.length} txs (${outVolume.toFixed(2)} ${token})</p>
+            <p><strong>Net Flow:</strong> ${(inVolume - outVolume).toFixed(2)} ${token}</p>
+            <p class="mt-md">
+                <a href="${explorerUrl}/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">View on Explorer</a>
+                <a href="/investigations?address=${nodeId}&chain=${chain}" class="btn btn-primary btn-sm">Investigate</a>
+            </p>
+        `;
+        detailsDiv.style.display = 'block';
+    }
+
+    // ── Add wallet to investigation ──────────────────────────────────
     function addToInvestigation(address) {
-        if (!currentInvestigationId) {
-            showNotification('No investigation loaded', 'error');
-            return;
-        }
-        
-        // Add wallet to investigation
+        if (!currentInvestigationId) { showNotification('No investigation loaded', 'error'); return; }
         fetch(`/api/investigations/${currentInvestigationId}/wallets`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: address, role: 'related' })
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address, role: 'related' })
         })
         .then(r => r.json())
         .then(data => {
-            if (data.error) {
-                showNotification(data.error, 'warning');
-            } else {
-                showNotification(`Added ${address.substring(0, 10)}... to investigation`, 'success');
-            }
+            if (data.error) showNotification(data.error, 'warning');
+            else showNotification(`Added ${address.substring(0, 10)}… to investigation`, 'success');
         })
         .catch(err => showNotification('Error: ' + err.message, 'error'));
     }
-    
-    // Load graph data from GraphQL API
+
+    // ── Load graph via REST / GraphQL (standard mode) ───────────────
     async function loadGraph() {
         const chain = document.getElementById('chain-select').value;
         const symbol = document.getElementById('token-select').value;
         const limit = document.getElementById('limit-select').value;
         const minValue = document.getElementById('min-value').value || 0;
-        
-        if (!symbol) {
-            showNotification('Please select a token first', 'warning');
-            return;
-        }
-        
-        showNotification(`Loading ${symbol.toUpperCase()} transfers on ${chain}...`, 'info');
-        
+
+        if (!symbol) { showNotification('Please select a token first', 'warning'); return; }
+        showNotification(`Loading ${symbol.toUpperCase()} transfers on ${chain}…`, 'info');
+
         try {
-            // Call our REST endpoint which internally uses GraphQL
             const url = `/api/graph/transfers?chain=${chain}&symbol=${symbol}&limit=${limit}`;
             const response = await fetch(url);
             const data = await response.json();
-            
-            if (data.error) {
-                showNotification(`Error: ${data.error}`, 'error');
-                console.error(data.traceback);
-                return;
-            }
-            
-            // Clear and add new data
-            nodes.clear();
-            edges.clear();
-            
+
+            if (data.error) { showNotification(`Error: ${data.error}`, 'error'); console.error(data.traceback); return; }
+
             if (data.nodes && data.nodes.length > 0) {
-                // Filter by minimum value if specified
                 let filteredEdges = data.edges;
                 let filteredNodes = data.nodes;
-                
                 if (parseFloat(minValue) > 0) {
                     filteredEdges = data.edges.filter(e => e.value >= parseFloat(minValue));
-                    const connectedNodeIds = new Set();
-                    filteredEdges.forEach(e => {
-                        connectedNodeIds.add(e.from);
-                        connectedNodeIds.add(e.to);
-                    });
-                    filteredNodes = data.nodes.filter(n => connectedNodeIds.has(n.id));
+                    const ids = new Set();
+                    filteredEdges.forEach(e => { ids.add(e.from); ids.add(e.to); });
+                    filteredNodes = data.nodes.filter(n => ids.has(n.id));
                 }
-                
-                nodes.add(filteredNodes);
-                edges.add(filteredEdges);
-                
-                // Update stats
+
+                rawGraphData = { nodes: filteredNodes, edges: filteredEdges };
+                const g6Data = toG6Data(rawGraphData);
+                createGraph(g6Data);
+
                 document.getElementById('node-count').textContent = filteredNodes.length;
                 document.getElementById('edge-count').textContent = filteredEdges.length;
-                const totalVolume = filteredEdges.reduce((sum, e) => sum + (e.value || 0), 0);
-                document.getElementById('graph-volume').textContent = totalVolume.toLocaleString() + ' ' + symbol.toUpperCase();
-                
+                const totalVol = filteredEdges.reduce((s, e) => s + (e.value || 0), 0);
+                document.getElementById('graph-volume').textContent = totalVol.toLocaleString() + ' ' + symbol.toUpperCase();
                 showNotification(`Loaded ${filteredEdges.length} transfers from ${filteredNodes.length} wallets`, 'success');
             } else {
                 showNotification('No transfer data found. Try fetching data first via Admin panel.', 'warning');
             }
-            
         } catch (error) {
             console.error('Error loading graph:', error);
             showNotification('Failed to load graph: ' + error.message, 'error');
         }
     }
-    
-    function showNodeDetails(nodeId) {
-        const node = nodes.get(nodeId);
-        const detailsDiv = document.getElementById('node-details');
-        const infoDiv = document.getElementById('node-info');
-        const chain = document.getElementById('chain-select').value;
-        
-        // Get explorer URL based on chain
-        const explorers = {
-            'ETH': 'https://etherscan.io',
-            'POL': 'https://polygonscan.com',
-            'BSC': 'https://bscscan.com',
-            'BASE': 'https://basescan.org',
-            'ARB': 'https://arbiscan.io',
-            'OP': 'https://optimistic.etherscan.io',
-            'AVAX': 'https://snowtrace.io',
-            'FTM': 'https://ftmscan.com'
-        };
-        const explorerUrl = explorers[chain] || 'https://etherscan.io';
-        
-        const connectedEdges = network.getConnectedEdges(nodeId);
-        const incomingTxs = connectedEdges.filter(edgeId => {
-            const edge = edges.get(edgeId);
-            return edge && edge.to === nodeId;
-        });
-        const outgoingTxs = connectedEdges.filter(edgeId => {
-            const edge = edges.get(edgeId);
-            return edge && edge.from === nodeId;
-        });
-        
-        // Calculate volumes
-        let inVolume = 0, outVolume = 0;
-        incomingTxs.forEach(edgeId => {
-            const edge = edges.get(edgeId);
-            if (edge) inVolume += edge.value || 0;
-        });
-        outgoingTxs.forEach(edgeId => {
-            const edge = edges.get(edgeId);
-            if (edge) outVolume += edge.value || 0;
-        });
-        
-        const token = document.getElementById('token-select').value.toUpperCase() || 'TOKEN';
-        
-        infoDiv.innerHTML = `
-            <p><strong>Address:</strong> <code>${nodeId}</code></p>
-            <p><strong>Incoming:</strong> ${incomingTxs.length} txs (${inVolume.toFixed(2)} ${token})</p>
-            <p><strong>Outgoing:</strong> ${outgoingTxs.length} txs (${outVolume.toFixed(2)} ${token})</p>
-            <p><strong>Net Flow:</strong> ${(inVolume - outVolume).toFixed(2)} ${token}</p>
-            <p class="mt-md">
-                <a href="${explorerUrl}/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">
-                    View on Explorer
-                </a>
-                <a href="/investigations?address=${nodeId}&chain=${chain}" class="btn btn-primary btn-sm">
-                    Investigate
-                </a>
-            </p>
-        `;
-        
-        detailsDiv.style.display = 'block';
-    }
-    
+
+    // ── Export ───────────────────────────────────────────────────────
     function exportGraph() {
-        const chain = document.getElementById('chain-select').value;
-        const symbol = document.getElementById('token-select').value || 'unknown';
-        
+        const chain = document.getElementById('chain-select')?.value || 'unknown';
+        const symbol = document.getElementById('token-select')?.value || 'unknown';
         const exportData = {
-            nodes: nodes.get(),
-            edges: edges.get(),
-            metadata: {
-                chain: chain,
-                symbol: symbol,
-                exportedAt: new Date().toISOString()
-            }
+            nodes: rawGraphData?.nodes || [],
+            edges: rawGraphData?.edges || [],
+            metadata: { chain, symbol, engine: 'G6-v5', exportedAt: new Date().toISOString() }
         };
-        
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `bubble-graph-${chain}-${symbol}.json`;
-        a.click();
+        const a = document.createElement('a'); a.href = url;
+        a.download = `bubble-graph-${chain}-${symbol}.json`; a.click();
         URL.revokeObjectURL(url);
-        
         showNotification('Graph exported successfully', 'success');
     }
-    
-    // Load available tokens from API
+
+    // ── Load tokens (standard mode) ─────────────────────────────────
     async function loadTokens() {
         try {
             const response = await fetch('/api/tokens/list');
             const data = await response.json();
-            
             const tokenSelect = document.getElementById('token-select');
+            if (!tokenSelect) return;
             tokenSelect.innerHTML = '';
-            
+
             if (data.tokens && data.tokens.length > 0) {
-                // Add "Select token" option
-                const defaultOption = document.createElement('option');
-                defaultOption.value = '';
-                defaultOption.textContent = '-- Select Token --';
-                tokenSelect.appendChild(defaultOption);
-                
-                // Group tokens by chain
-                const tokensByChain = {};
-                data.tokens.forEach(token => {
-                    const chain = token.trigram || 'OTHER';
-                    if (!tokensByChain[chain]) tokensByChain[chain] = [];
-                    tokensByChain[chain].push(token);
-                });
-                
-                // Add tokens grouped by chain
-                Object.keys(tokensByChain).sort().forEach(chain => {
-                    const optgroup = document.createElement('optgroup');
-                    optgroup.label = chain;
-                    
-                    tokensByChain[chain].forEach(token => {
-                        const option = document.createElement('option');
-                        option.value = token.symbol.toLowerCase();
-                        option.textContent = `${token.symbol} - ${token.name || token.symbol}`;
-                        optgroup.appendChild(option);
-                    });
-                    
-                    tokenSelect.appendChild(optgroup);
+                const def = document.createElement('option'); def.value = ''; def.textContent = '-- Select Token --';
+                tokenSelect.appendChild(def);
+                const byChain = {};
+                data.tokens.forEach(t => { const c = t.trigram || 'OTHER'; if (!byChain[c]) byChain[c] = []; byChain[c].push(t); });
+                Object.keys(byChain).sort().forEach(c => {
+                    const optg = document.createElement('optgroup'); optg.label = c;
+                    byChain[c].forEach(t => { const o = document.createElement('option'); o.value = t.symbol.toLowerCase(); o.textContent = `${t.symbol} - ${t.name || t.symbol}`; optg.appendChild(o); });
+                    tokenSelect.appendChild(optg);
                 });
             } else {
-                // Fallback to common tokens
-                const fallbackTokens = ['USDT', 'USDC', 'WETH', 'DAI', 'LINK'];
-                fallbackTokens.forEach(symbol => {
-                    const option = document.createElement('option');
-                    option.value = symbol.toLowerCase();
-                    option.textContent = symbol;
-                    tokenSelect.appendChild(option);
-                });
+                ['USDT','USDC','WETH','DAI','LINK'].forEach(s => { const o = document.createElement('option'); o.value = s.toLowerCase(); o.textContent = s; tokenSelect.appendChild(o); });
             }
-        } catch (error) {
-            console.error('Failed to load tokens:', error);
-            // Fallback
-            const tokenSelect = document.getElementById('token-select');
-            tokenSelect.innerHTML = '<option value="usdt">USDT</option><option value="usdc">USDC</option><option value="weth">WETH</option>';
+        } catch(err) {
+            console.error('Failed to load tokens:', err);
+            const ts = document.getElementById('token-select');
+            if (ts) ts.innerHTML = '<option value="usdt">USDT</option><option value="usdc">USDC</option><option value="weth">WETH</option>';
         }
     }
-    
-    // Initialize on page load
+
+    // ── Investigation filters ───────────────────────────────────────
+    async function loadInvestigationGraph(investigationId) {
+        currentInvestigationId = investigationId;
+        try {
+            const invResp = await fetch(`/api/investigations/${investigationId}`);
+            const invData = await invResp.json();
+            if (invData.error) { showNotification('Investigation not found', 'error'); return; }
+
+            const titleEl = document.getElementById('inv-title');
+            const subtitleEl = document.getElementById('inv-subtitle');
+            if (titleEl) titleEl.textContent = invData.name || `Investigation #${investigationId}`;
+            if (subtitleEl) {
+                const wc = invData.wallets ? invData.wallets.length : 0;
+                const tc = invData.tokens ? invData.tokens.length : 0;
+                subtitleEl.textContent = `${wc} wallets • ${tc} tokens tracked`;
+            }
+
+            const graphResp = await fetch(`/api/investigations/${investigationId}/graph?include_external=true`);
+            const graphData = await graphResp.json();
+            if (graphData.error) { showNotification('Error loading graph: ' + graphData.error, 'error'); return; }
+
+            rawGraphData = graphData;
+            populateFilters(graphData);
+            renderInvestigationGraph(graphData);
+        } catch(err) {
+            console.error('Error loading investigation graph:', err);
+            showNotification('Failed to load graph: ' + err.message, 'error');
+        }
+    }
+
+    function populateFilters(graphData) {
+        const tokens = new Set(), chains = new Set();
+        graphData.edges.forEach(e => { if (e.token) tokens.add(e.token); if (e.chain) chains.add(e.chain); });
+
+        const tokenFilter = document.getElementById('inv-token-filter');
+        if (tokenFilter) {
+            tokenFilter.innerHTML = '<option value="all">All Tokens</option>';
+            Array.from(tokens).sort().forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; tokenFilter.appendChild(o); });
+        }
+        const chainFilter = document.getElementById('inv-chain-filter');
+        if (chainFilter) {
+            chainFilter.innerHTML = '<option value="all">All Chains</option>';
+            Array.from(chains).sort().forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; chainFilter.appendChild(o); });
+        }
+    }
+
+    function applyInvestigationFilters() {
+        if (!rawGraphData) return;
+        const minValue = parseFloat(document.getElementById('inv-min-value')?.value || 0);
+        const tokenF = document.getElementById('inv-token-filter')?.value || 'all';
+        const chainF = document.getElementById('inv-chain-filter')?.value || 'all';
+
+        let fEdges = rawGraphData.edges.filter(e => {
+            if (minValue > 0 && (e.value || 0) < minValue) return false;
+            if (tokenF !== 'all' && e.token !== tokenF) return false;
+            if (chainF !== 'all' && e.chain !== chainF) return false;
+            return true;
+        });
+        const ids = new Set();
+        fEdges.forEach(e => { ids.add(e.from); ids.add(e.to); });
+        const fNodes = rawGraphData.nodes.filter(n => ids.has(n.id));
+
+        renderInvestigationGraph({ nodes: fNodes, edges: fEdges });
+        showNotification(`Filtered: ${fEdges.length} transfers, ${fNodes.length} wallets`, 'info');
+    }
+
+    function resetInvestigationFilters() {
+        const mv = document.getElementById('inv-min-value'); if (mv) mv.value = 0;
+        const tf = document.getElementById('inv-token-filter'); if (tf) tf.value = 'all';
+        const cf = document.getElementById('inv-chain-filter'); if (cf) cf.value = 'all';
+        if (rawGraphData) { renderInvestigationGraph(rawGraphData); showNotification('Filters reset', 'info'); }
+    }
+
+    // ── Init ────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', function() {
-        initGraph();
-        loadTokens();  // Load available tokens from API
-        
-        // Check if we're in investigation mode
+        loadTokens();
         const investigationId = {{ investigation_id|default('null') }};
         if (investigationId) {
             loadInvestigationGraph(investigationId);
         }
     });
-    
-    // Store raw graph data for filtering
-    let rawGraphData = null;
-    let currentInvestigationId = null;
-    
-    function formatVolume(num) {
-        if (num === null || num === undefined || isNaN(num)) return '0';
-        if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
-        if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-        if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-        if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
-        return num.toFixed(2);
-    }
-    
-    async function loadInvestigationGraph(investigationId) {
-        currentInvestigationId = investigationId;
-        
-        try {
-            // First, get investigation details
-            const invResponse = await fetch(`/api/investigations/${investigationId}`);
-            const invData = await invResponse.json();
-            
-            if (invData.error) {
-                showNotification('Investigation not found', 'error');
-                return;
-            }
-            
-            // Update header with investigation info
-            const titleEl = document.getElementById('inv-title');
-            const subtitleEl = document.getElementById('inv-subtitle');
-            if (titleEl) {
-                titleEl.textContent = invData.name || `Investigation #${investigationId}`;
-            }
-            if (subtitleEl) {
-                const walletCount = invData.wallets ? invData.wallets.length : 0;
-                const tokenCount = invData.tokens ? invData.tokens.length : 0;
-                subtitleEl.textContent = `${walletCount} wallets • ${tokenCount} tokens tracked`;
-            }
-            
-            // Now load the graph data
-            const graphResponse = await fetch(`/api/investigations/${investigationId}/graph?include_external=true`);
-            const graphData = await graphResponse.json();
-            
-            if (graphData.error) {
-                showNotification('Error loading graph: ' + graphData.error, 'error');
-                return;
-            }
-            
-            // Store raw data for filtering
-            rawGraphData = graphData;
-            
-            // Populate filter dropdowns
-            populateFilters(graphData);
-            
-            // Render the graph
-            renderInvestigationGraph(graphData);
-            
-        } catch (error) {
-            console.error('Error loading investigation graph:', error);
-            showNotification('Failed to load graph: ' + error.message, 'error');
-        }
-    }
-    
-    function populateFilters(graphData) {
-        // Get unique tokens and chains from edges
-        const tokens = new Set();
-        const chains = new Set();
-        
-        graphData.edges.forEach(e => {
-            if (e.token) tokens.add(e.token);
-            if (e.chain) chains.add(e.chain);
-        });
-        
-        // Populate token filter
-        const tokenFilter = document.getElementById('inv-token-filter');
-        if (tokenFilter) {
-            tokenFilter.innerHTML = '<option value="all">All Tokens</option>';
-            Array.from(tokens).sort().forEach(token => {
-                const opt = document.createElement('option');
-                opt.value = token;
-                opt.textContent = token;
-                tokenFilter.appendChild(opt);
-            });
-        }
-        
-        // Populate chain filter
-        const chainFilter = document.getElementById('inv-chain-filter');
-        if (chainFilter) {
-            chainFilter.innerHTML = '<option value="all">All Chains</option>';
-            Array.from(chains).sort().forEach(chain => {
-                const opt = document.createElement('option');
-                opt.value = chain;
-                opt.textContent = chain;
-                chainFilter.appendChild(opt);
-            });
-        }
-    }
-    
-    function applyInvestigationFilters() {
-        if (!rawGraphData) return;
-        
-        const minValue = parseFloat(document.getElementById('inv-min-value')?.value || 0);
-        const tokenFilter = document.getElementById('inv-token-filter')?.value || 'all';
-        const chainFilter = document.getElementById('inv-chain-filter')?.value || 'all';
-        
-        // Filter edges
-        let filteredEdges = rawGraphData.edges.filter(e => {
-            if (minValue > 0 && (e.value || 0) < minValue) return false;
-            if (tokenFilter !== 'all' && e.token !== tokenFilter) return false;
-            if (chainFilter !== 'all' && e.chain !== chainFilter) return false;
-            return true;
-        });
-        
-        // Get connected nodes
-        const connectedNodeIds = new Set();
-        filteredEdges.forEach(e => {
-            connectedNodeIds.add(e.from);
-            connectedNodeIds.add(e.to);
-        });
-        
-        const filteredNodes = rawGraphData.nodes.filter(n => connectedNodeIds.has(n.id));
-        
-        // Render filtered graph
-        renderInvestigationGraph({
-            nodes: filteredNodes,
-            edges: filteredEdges
-        });
-        
-        showNotification(`Filtered: ${filteredEdges.length} transfers, ${filteredNodes.length} wallets`, 'info');
-    }
-    
-    function resetInvestigationFilters() {
-        document.getElementById('inv-min-value').value = 0;
-        document.getElementById('inv-token-filter').value = 'all';
-        if (document.getElementById('inv-chain-filter')) {
-            document.getElementById('inv-chain-filter').value = 'all';
-        }
-        
-        if (rawGraphData) {
-            renderInvestigationGraph(rawGraphData);
-            showNotification('Filters reset', 'info');
-        }
-    }
-    
-    function renderInvestigationGraph(graphData) {
-        // Clear existing
-        nodes.clear();
-        edges.clear();
-        
-        if (!graphData.nodes || graphData.nodes.length === 0) {
-            showNotification('No transfer data. Run "Sync Transfers" first.', 'warning');
-            return;
-        }
-        
-        // ── Build adjacency + metrics ──────────────────────────────
-        const nodeVolume = {};
-        const nodeInDegree = {};
-        const nodeOutDegree = {};
-        const nodeFirstTs = {};   // earliest timestamp
-        const nodeLastTs = {};
-        
-        graphData.edges.forEach(e => {
-            const val = e.value || 0;
-            const ts = e.timestamp || 0;
-            nodeVolume[e.from] = (nodeVolume[e.from] || 0) + val;
-            nodeVolume[e.to] = (nodeVolume[e.to] || 0) + val;
-            nodeOutDegree[e.from] = (nodeOutDegree[e.from] || 0) + 1;
-            nodeInDegree[e.to] = (nodeInDegree[e.to] || 0) + 1;
-            if (ts > 0) {
-                nodeFirstTs[e.from] = Math.min(nodeFirstTs[e.from] || Infinity, ts);
-                nodeFirstTs[e.to]   = Math.min(nodeFirstTs[e.to]   || Infinity, ts);
-                nodeLastTs[e.from]  = Math.max(nodeLastTs[e.from]  || 0, ts);
-                nodeLastTs[e.to]    = Math.max(nodeLastTs[e.to]    || 0, ts);
-            }
-        });
-        
-        const volumes = Object.values(nodeVolume).filter(v => v > 0);
-        const maxVolume = Math.max(...volumes, 1);
-        const p90Volume = volumes.sort((a, b) => a - b)[Math.floor(volumes.length * 0.9)] || maxVolume;
-        
-        // ── Role-based color palette ───────────────────────────────
-        const ROLE_COLORS = {
-            'attacker':  { bg: '#ef4444', border: '#dc2626', glow: 'rgba(239, 68, 68, 0.6)' },
-            'suspect':   { bg: '#ef4444', border: '#dc2626', glow: 'rgba(239, 68, 68, 0.5)' },
-            'hacker':    { bg: '#ef4444', border: '#dc2626', glow: 'rgba(239, 68, 68, 0.5)' },
-            'victim':    { bg: '#22c55e', border: '#16a34a', glow: 'rgba(34, 197, 94, 0.5)' },
-            'theft_origin': { bg: '#22c55e', border: '#16a34a', glow: 'rgba(34, 197, 94, 0.5)' },
-            'exchange':  { bg: '#a855f7', border: '#9333ea', glow: 'rgba(168, 85, 247, 0.4)' },
-            'cex':       { bg: '#a855f7', border: '#9333ea', glow: 'rgba(168, 85, 247, 0.4)' },
-            'dex':       { bg: '#a855f7', border: '#9333ea', glow: 'rgba(168, 85, 247, 0.4)' },
-            'mixer':     { bg: '#f59e0b', border: '#d97706', glow: 'rgba(245, 158, 11, 0.4)' },
-            'tornado':   { bg: '#f59e0b', border: '#d97706', glow: 'rgba(245, 158, 11, 0.4)' },
-            'tumbler':   { bg: '#f59e0b', border: '#d97706', glow: 'rgba(245, 158, 11, 0.4)' },
-            'bridge':    { bg: '#06b6d4', border: '#0891b2', glow: 'rgba(6, 182, 212, 0.4)' },
-            'related':   { bg: '#6366f1', border: '#4f46e5', glow: 'rgba(99, 102, 241, 0.3)' },
-            'external':  { bg: '#334155', border: '#475569', glow: 'none' }
-        };
-        
-        function getColor(role) {
-            return ROLE_COLORS[role] || ROLE_COLORS['external'];
-        }
-        
-        // ── Assign hierarchical levels for L→R flow ────────────────
-        // Role-based priority: sources (attackers/victims) left, sinks (exchange/mixer/bridge) right 
-        // For flow layout, we need a 'level' per node.
-        // Strategy: BFS from attacker/suspect nodes following edge direction.
-        
-        const SOURCE_ROLES = new Set(['attacker', 'suspect', 'hacker', 'scammer', 'exploiter', 'thief', 'victim', 'theft_origin']);
-        const SINK_ROLES = new Set(['exchange', 'cex', 'dex', 'mixer', 'tornado', 'tumbler', 'bridge', 'cross_chain']);
-        
-        // Build adjacency for BFS
-        const adjOut = {};  // from -> [to]
-        const adjIn = {};   // to -> [from]
-        graphData.edges.forEach(e => {
-            if (!adjOut[e.from]) adjOut[e.from] = [];
-            adjOut[e.from].push(e.to);
-            if (!adjIn[e.to]) adjIn[e.to] = [];
-            adjIn[e.to].push(e.from);
-        });
-        
-        // Identify source nodes (case wallets with source roles, or pure sources)
-        const nodeById = {};
-        graphData.nodes.forEach(n => { nodeById[n.id] = n; });
-        
-        const levelMap = {};
-        
-        // BFS from source wallets
-        const sourceNodes = graphData.nodes.filter(n => {
-            const role = (n.role || '').toLowerCase();
-            return SOURCE_ROLES.has(role);
-        });
-        
-        // If no explicit source roles, use nodes with only outgoing edges (pure senders)
-        if (sourceNodes.length === 0) {
-            graphData.nodes.forEach(n => {
-                if ((nodeOutDegree[n.id] || 0) > 0 && (nodeInDegree[n.id] || 0) === 0) {
-                    sourceNodes.push(n);
-                }
-            });
-        }
-        
-        // BFS to assign levels
-        const queue = [];
-        sourceNodes.forEach(n => {
-            levelMap[n.id] = 0;
-            queue.push(n.id);
-        });
-        
-        let head = 0;
-        while (head < queue.length) {
-            const cur = queue[head++];
-            const curLevel = levelMap[cur];
-            const neighbors = adjOut[cur] || [];
-            for (const next of neighbors) {
-                if (levelMap[next] === undefined || levelMap[next] < curLevel + 1) {
-                    levelMap[next] = curLevel + 1;
-                    queue.push(next);
-                }
-            }
-        }
-        
-        // Assign remaining unvisited nodes based on timestamp or degree
-        const allTimestamps = Object.values(nodeFirstTs).filter(t => t > 0 && t < Infinity);
-        const minGlobalTs = Math.min(...allTimestamps, Infinity);
-        const maxGlobalTs = Math.max(...allTimestamps, 0);
-        const tsRange = maxGlobalTs - minGlobalTs || 1;
-        const maxLevel = Math.max(...Object.values(levelMap), 4);
-        
-        graphData.nodes.forEach(n => {
-            if (levelMap[n.id] === undefined) {
-                // Assign by timestamp if available
-                const ts = nodeFirstTs[n.id];
-                if (ts && ts > 0 && ts < Infinity) {
-                    levelMap[n.id] = Math.round(((ts - minGlobalTs) / tsRange) * maxLevel);
-                } else {
-                    // Fallback: sinks at the right, others in the middle
-                    const role = (n.role || '').toLowerCase();
-                    if (SINK_ROLES.has(role)) {
-                        levelMap[n.id] = maxLevel + 1;
-                    } else {
-                        levelMap[n.id] = Math.round(maxLevel / 2);
-                    }
-                }
-            }
-        });
-        
-        // Force sinks to the rightmost level
-        graphData.nodes.forEach(n => {
-            const role = (n.role || '').toLowerCase();
-            if (SINK_ROLES.has(role)) {
-                levelMap[n.id] = Math.max(levelMap[n.id] || 0, maxLevel + 1);
-            }
-        });
-        
-        // ── Build vis.js nodes ─────────────────────────────────────
-        const visNodes = graphData.nodes.map(n => {
-            const vol = nodeVolume[n.id] || 0;
-            const degree = (nodeInDegree[n.id] || 0) + (nodeOutDegree[n.id] || 0);
-            const role = (n.role || 'external').toLowerCase();
-            const palette = getColor(role);
-            const isCaseWallet = n.is_case_wallet;
-            
-            // Size: log scale, min 8, max 45
-            const baseSize = 8 + Math.log10(Math.max(vol, 1)) * 4;
-            const size = Math.max(8, Math.min(baseSize, 45));
-            
-            // Label: show for case wallets + role + high-degree
-            let label = '';
-            if (isCaseWallet) {
-                label = n.label + '\n(' + role + ')';
-            } else if (degree > 8) {
-                label = n.label;
-            }
-            
-            const nodeObj = {
-                id: n.id,
-                label: label,
-                color: {
-                    background: palette.bg,
-                    border: palette.border,
-                    highlight: { background: palette.bg, border: '#f8fafc' },
-                    hover: { background: palette.bg, border: '#f8fafc' }
-                },
-                size: size,
-                borderWidth: isCaseWallet ? 3 : 1.5,
-                shadow: {
-                    enabled: isCaseWallet || vol > p90Volume,
-                    color: palette.glow,
-                    size: isCaseWallet ? 15 : 8
-                },
-                title: `${n.id}\nRole: ${role}\nVolume: ${formatVolume(vol)}\nConnections: ${degree}\nLevel: ${levelMap[n.id] || 0}`
-            };
-            
-            // Assign level for hierarchical layout
-            if (currentLayout === 'flow') {
-                nodeObj.level = levelMap[n.id] || 0;
-            }
-            
-            return nodeObj;
-        });
-        
-        // ── Build vis.js edges ─────────────────────────────────────
-        const visEdges = graphData.edges.map(e => {
-            const val = e.value || 0;
-            const width = 0.5 + Math.log10(Math.max(val, 1)) * 0.4;
-            
-            return {
-                id: e.id,
-                from: e.from,
-                to: e.to,
-                width: Math.max(0.5, Math.min(width, 6)),
-                arrows: { to: { enabled: true, scaleFactor: 0.35, type: 'arrow' } },
-                title: `${formatVolume(val)} ${e.token || ''}\nTx: ${e.hash?.substring(0, 12)}...`,
-                color: { 
-                    color: 'rgba(100, 100, 140, 0.25)',
-                    highlight: '#6366f1',
-                    hover: '#8b5cf6'
-                },
-                smooth: currentLayout === 'flow' 
-                    ? { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 }
-                    : { type: 'curvedCW', roundness: 0.15 }
-            };
-        });
-        
-        nodes.add(visNodes);
-        edges.add(visEdges);
-        
-        // Update stats
-        document.getElementById('node-count').textContent = visNodes.length.toLocaleString();
-        document.getElementById('edge-count').textContent = visEdges.length.toLocaleString();
-        
-        const totalVolume = graphData.edges.reduce((sum, e) => sum + (e.value || 0), 0);
-        document.getElementById('graph-volume').textContent = formatVolume(totalVolume);
-        document.getElementById('data-source').textContent = 'Investigation Transfers';
-        
-        showNotification(`Loaded ${visEdges.length} transfers from ${visNodes.length} wallets (${currentLayout} layout)`, 'success');
-        
-        // Fit the network
-        setTimeout(() => {
-            if (network) {
-                network.fit({ animation: { duration: 600, easingFunction: 'easeInOutQuad' } });
-            }
-        }, 800);
-    }
 </script>
 {% endblock %}
