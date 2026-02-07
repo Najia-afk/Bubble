@@ -69,6 +69,9 @@
         <button onclick="resetInvestigationFilters()" class="btn btn-secondary">
             Reset
         </button>
+        <button onclick="toggleLayout()" class="btn btn-secondary" id="layout-toggle-btn" title="Switch between flow and force layout">
+            ⇄ Layout
+        </button>
         <button onclick="exportGraph()" class="btn btn-secondary">
             Export
         </button>
@@ -167,27 +170,34 @@
             {% if investigation_id %}
             <div class="legend-item">
                 <span class="legend-color" style="background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.5);"></span>
-                <span>Case Wallet</span>
+                <span>Attacker / Suspect</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4);"></span>
+                <span>Victim / Origin</span>
             </div>
             <div class="legend-item">
                 <span class="legend-color" style="background: #a855f7;"></span>
-                <span>Exchange / Hub</span>
+                <span>Exchange / CEX</span>
             </div>
             <div class="legend-item">
                 <span class="legend-color" style="background: #f59e0b;"></span>
-                <span>High Volume</span>
+                <span>Mixer / Privacy</span>
             </div>
             <div class="legend-item">
                 <span class="legend-color" style="background: #06b6d4;"></span>
-                <span>Hub (10+ links)</span>
+                <span>Bridge</span>
             </div>
             <div class="legend-item">
                 <span class="legend-color" style="background: #6366f1;"></span>
-                <span>External Wallet</span>
+                <span>Related / Intermediate</span>
             </div>
             <div class="legend-item">
                 <span class="legend-color" style="background: #334155;"></span>
-                <span>Leaf Node</span>
+                <span>External</span>
+            </div>
+            <div class="legend-item" style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+                <span>← Source &nbsp;&nbsp; Money Flow → &nbsp;&nbsp; Sink →</span>
             </div>
             {% else %}
             <div class="legend-item">
@@ -219,6 +229,7 @@
     let network = null;
     let nodes = new vis.DataSet([]);
     let edges = new vis.DataSet([]);
+    let currentLayout = 'flow'; // 'flow' or 'force'
     
     // Initialize the network graph
     function initGraph() {
@@ -226,59 +237,7 @@
         
         const data = { nodes: nodes, edges: edges };
         
-        const options = {
-            nodes: {
-                shape: 'dot',
-                size: 16,
-                font: { size: 11, color: '#94a3b8', face: 'Inter, sans-serif' },
-                borderWidth: 2,
-                shadow: { enabled: true, color: 'rgba(0,0,0,0.3)', size: 6, x: 0, y: 2 },
-                chosen: {
-                    node: function(values) {
-                        values.size = values.size * 1.3;
-                        values.shadowSize = 12;
-                    }
-                }
-            },
-            edges: {
-                width: 1.5,
-                arrows: { to: { enabled: true, scaleFactor: 0.4, type: 'arrow' } },
-                smooth: { type: 'continuous', roundness: 0.15 },
-                color: { color: 'rgba(100, 100, 140, 0.35)', highlight: '#6366f1', hover: '#8b5cf6' },
-                hoverWidth: 0.5
-            },
-            physics: {
-                enabled: true,
-                solver: 'forceAtlas2Based',
-                forceAtlas2Based: {
-                    gravitationalConstant: -120,
-                    centralGravity: 0.008,
-                    springLength: 100,
-                    springConstant: 0.08,
-                    damping: 0.5,
-                    avoidOverlap: 0.3
-                },
-                stabilization: {
-                    enabled: true,
-                    iterations: 300,
-                    updateInterval: 25
-                },
-                maxVelocity: 50,
-                minVelocity: 0.75
-            },
-            interaction: {
-                hover: true,
-                tooltipDelay: 150,
-                hideEdgesOnDrag: true,
-                hideEdgesOnZoom: true,
-                multiselect: true,
-                navigationButtons: false,
-                keyboard: { enabled: true }
-            },
-            layout: {
-                improvedLayout: true
-            }
-        };
+        const options = getNetworkOptions(currentLayout);
         
         network = new vis.Network(container, data, options);
         
@@ -300,6 +259,118 @@
         network.on('blurNode', function() {
             network.canvas.body.container.style.cursor = 'default';
         });
+    }
+    
+    function getNetworkOptions(layout) {
+        const baseOptions = {
+            nodes: {
+                shape: 'dot',
+                size: 16,
+                font: { size: 11, color: '#94a3b8', face: 'Inter, sans-serif' },
+                borderWidth: 2,
+                shadow: { enabled: true, color: 'rgba(0,0,0,0.3)', size: 6, x: 0, y: 2 },
+                chosen: {
+                    node: function(values) {
+                        values.size = values.size * 1.3;
+                        values.shadowSize = 12;
+                    }
+                }
+            },
+            edges: {
+                width: 1.5,
+                arrows: { to: { enabled: true, scaleFactor: 0.4, type: 'arrow' } },
+                smooth: { type: 'continuous', roundness: 0.15 },
+                color: { color: 'rgba(100, 100, 140, 0.35)', highlight: '#6366f1', hover: '#8b5cf6' },
+                hoverWidth: 0.5
+            },
+            interaction: {
+                hover: true,
+                tooltipDelay: 150,
+                hideEdgesOnDrag: true,
+                hideEdgesOnZoom: true,
+                multiselect: true,
+                navigationButtons: false,
+                keyboard: { enabled: true }
+            }
+        };
+        
+        if (layout === 'flow') {
+            // Hierarchical left-to-right: victim(left) → money flow → sink(right)
+            baseOptions.layout = {
+                hierarchical: {
+                    enabled: true,
+                    direction: 'LR',
+                    sortMethod: 'directed',
+                    levelSeparation: 220,
+                    nodeSpacing: 30,
+                    treeSpacing: 60,
+                    blockShifting: true,
+                    edgeMinimization: true,
+                    parentCentralization: true
+                }
+            };
+            baseOptions.physics = {
+                enabled: true,
+                hierarchicalRepulsion: {
+                    centralGravity: 0.0,
+                    springLength: 180,
+                    springConstant: 0.01,
+                    nodeDistance: 140,
+                    damping: 0.09,
+                    avoidOverlap: 0.5
+                },
+                stabilization: { enabled: true, iterations: 400, updateInterval: 25 },
+                maxVelocity: 30,
+                minVelocity: 0.75
+            };
+            baseOptions.edges.smooth = { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 };
+        } else {
+            // Force-directed (original)
+            baseOptions.physics = {
+                enabled: true,
+                solver: 'forceAtlas2Based',
+                forceAtlas2Based: {
+                    gravitationalConstant: -120,
+                    centralGravity: 0.008,
+                    springLength: 100,
+                    springConstant: 0.08,
+                    damping: 0.5,
+                    avoidOverlap: 0.3
+                },
+                stabilization: { enabled: true, iterations: 300, updateInterval: 25 },
+                maxVelocity: 50,
+                minVelocity: 0.75
+            };
+            baseOptions.layout = { improvedLayout: true };
+        }
+        
+        return baseOptions;
+    }
+    
+    function toggleLayout() {
+        currentLayout = (currentLayout === 'flow') ? 'force' : 'flow';
+        const btn = document.getElementById('layout-toggle-btn');
+        if (btn) btn.textContent = currentLayout === 'flow' ? '⇄ Force' : '⇄ Flow';
+        
+        // Rebuild network with new layout
+        if (network) network.destroy();
+        const container = document.getElementById('network-graph');
+        const options = getNetworkOptions(currentLayout);
+        nodes = new vis.DataSet([]);
+        edges = new vis.DataSet([]);
+        network = new vis.Network(container, { nodes, edges }, options);
+        
+        network.on('click', function(params) {
+            if (params.nodes.length > 0) {
+                if (rawGraphData) showInvestigationNodeDetails(params.nodes[0]);
+                else showNodeDetails(params.nodes[0]);
+            }
+        });
+        network.on('hoverNode', () => network.canvas.body.container.style.cursor = 'pointer');
+        network.on('blurNode', () => network.canvas.body.container.style.cursor = 'default');
+        
+        // Re-render current data
+        if (rawGraphData) renderInvestigationGraph(rawGraphData);
     }
     
     function showInvestigationNodeDetails(nodeId) {
@@ -778,64 +849,169 @@
             return;
         }
         
-        // Calculate volume per node for sizing
+        // ── Build adjacency + metrics ──────────────────────────────
         const nodeVolume = {};
         const nodeInDegree = {};
         const nodeOutDegree = {};
+        const nodeFirstTs = {};   // earliest timestamp
+        const nodeLastTs = {};
+        
         graphData.edges.forEach(e => {
             const val = e.value || 0;
+            const ts = e.timestamp || 0;
             nodeVolume[e.from] = (nodeVolume[e.from] || 0) + val;
             nodeVolume[e.to] = (nodeVolume[e.to] || 0) + val;
             nodeOutDegree[e.from] = (nodeOutDegree[e.from] || 0) + 1;
             nodeInDegree[e.to] = (nodeInDegree[e.to] || 0) + 1;
+            if (ts > 0) {
+                nodeFirstTs[e.from] = Math.min(nodeFirstTs[e.from] || Infinity, ts);
+                nodeFirstTs[e.to]   = Math.min(nodeFirstTs[e.to]   || Infinity, ts);
+                nodeLastTs[e.from]  = Math.max(nodeLastTs[e.from]  || 0, ts);
+                nodeLastTs[e.to]    = Math.max(nodeLastTs[e.to]    || 0, ts);
+            }
         });
         
-        // Find max volume for scaling
         const volumes = Object.values(nodeVolume).filter(v => v > 0);
         const maxVolume = Math.max(...volumes, 1);
         const p90Volume = volumes.sort((a, b) => a - b)[Math.floor(volumes.length * 0.9)] || maxVolume;
         
-        // Color palette (Aria-inspired)
-        const COLORS = {
-            caseWallet:  { bg: '#ef4444', border: '#dc2626', glow: 'rgba(239, 68, 68, 0.6)' },
-            exchange:    { bg: '#a855f7', border: '#9333ea', glow: 'rgba(168, 85, 247, 0.4)' },
-            highVolume:  { bg: '#f59e0b', border: '#d97706', glow: 'rgba(245, 158, 11, 0.4)' },
-            hub:         { bg: '#06b6d4', border: '#0891b2', glow: 'rgba(6, 182, 212, 0.4)' },
-            external:    { bg: '#6366f1', border: '#4f46e5', glow: 'rgba(99, 102, 241, 0.3)' },
-            leaf:        { bg: '#334155', border: '#475569', glow: 'none' }
+        // ── Role-based color palette ───────────────────────────────
+        const ROLE_COLORS = {
+            'attacker':  { bg: '#ef4444', border: '#dc2626', glow: 'rgba(239, 68, 68, 0.6)' },
+            'suspect':   { bg: '#ef4444', border: '#dc2626', glow: 'rgba(239, 68, 68, 0.5)' },
+            'hacker':    { bg: '#ef4444', border: '#dc2626', glow: 'rgba(239, 68, 68, 0.5)' },
+            'victim':    { bg: '#22c55e', border: '#16a34a', glow: 'rgba(34, 197, 94, 0.5)' },
+            'theft_origin': { bg: '#22c55e', border: '#16a34a', glow: 'rgba(34, 197, 94, 0.5)' },
+            'exchange':  { bg: '#a855f7', border: '#9333ea', glow: 'rgba(168, 85, 247, 0.4)' },
+            'cex':       { bg: '#a855f7', border: '#9333ea', glow: 'rgba(168, 85, 247, 0.4)' },
+            'dex':       { bg: '#a855f7', border: '#9333ea', glow: 'rgba(168, 85, 247, 0.4)' },
+            'mixer':     { bg: '#f59e0b', border: '#d97706', glow: 'rgba(245, 158, 11, 0.4)' },
+            'tornado':   { bg: '#f59e0b', border: '#d97706', glow: 'rgba(245, 158, 11, 0.4)' },
+            'tumbler':   { bg: '#f59e0b', border: '#d97706', glow: 'rgba(245, 158, 11, 0.4)' },
+            'bridge':    { bg: '#06b6d4', border: '#0891b2', glow: 'rgba(6, 182, 212, 0.4)' },
+            'related':   { bg: '#6366f1', border: '#4f46e5', glow: 'rgba(99, 102, 241, 0.3)' },
+            'external':  { bg: '#334155', border: '#475569', glow: 'none' }
         };
         
-        // Transform nodes for vis.js
+        function getColor(role) {
+            return ROLE_COLORS[role] || ROLE_COLORS['external'];
+        }
+        
+        // ── Assign hierarchical levels for L→R flow ────────────────
+        // Role-based priority: sources (attackers/victims) left, sinks (exchange/mixer/bridge) right 
+        // For flow layout, we need a 'level' per node.
+        // Strategy: BFS from attacker/suspect nodes following edge direction.
+        
+        const SOURCE_ROLES = new Set(['attacker', 'suspect', 'hacker', 'scammer', 'exploiter', 'thief', 'victim', 'theft_origin']);
+        const SINK_ROLES = new Set(['exchange', 'cex', 'dex', 'mixer', 'tornado', 'tumbler', 'bridge', 'cross_chain']);
+        
+        // Build adjacency for BFS
+        const adjOut = {};  // from -> [to]
+        const adjIn = {};   // to -> [from]
+        graphData.edges.forEach(e => {
+            if (!adjOut[e.from]) adjOut[e.from] = [];
+            adjOut[e.from].push(e.to);
+            if (!adjIn[e.to]) adjIn[e.to] = [];
+            adjIn[e.to].push(e.from);
+        });
+        
+        // Identify source nodes (case wallets with source roles, or pure sources)
+        const nodeById = {};
+        graphData.nodes.forEach(n => { nodeById[n.id] = n; });
+        
+        const levelMap = {};
+        
+        // BFS from source wallets
+        const sourceNodes = graphData.nodes.filter(n => {
+            const role = (n.role || '').toLowerCase();
+            return SOURCE_ROLES.has(role);
+        });
+        
+        // If no explicit source roles, use nodes with only outgoing edges (pure senders)
+        if (sourceNodes.length === 0) {
+            graphData.nodes.forEach(n => {
+                if ((nodeOutDegree[n.id] || 0) > 0 && (nodeInDegree[n.id] || 0) === 0) {
+                    sourceNodes.push(n);
+                }
+            });
+        }
+        
+        // BFS to assign levels
+        const queue = [];
+        sourceNodes.forEach(n => {
+            levelMap[n.id] = 0;
+            queue.push(n.id);
+        });
+        
+        let head = 0;
+        while (head < queue.length) {
+            const cur = queue[head++];
+            const curLevel = levelMap[cur];
+            const neighbors = adjOut[cur] || [];
+            for (const next of neighbors) {
+                if (levelMap[next] === undefined || levelMap[next] < curLevel + 1) {
+                    levelMap[next] = curLevel + 1;
+                    queue.push(next);
+                }
+            }
+        }
+        
+        // Assign remaining unvisited nodes based on timestamp or degree
+        const allTimestamps = Object.values(nodeFirstTs).filter(t => t > 0 && t < Infinity);
+        const minGlobalTs = Math.min(...allTimestamps, Infinity);
+        const maxGlobalTs = Math.max(...allTimestamps, 0);
+        const tsRange = maxGlobalTs - minGlobalTs || 1;
+        const maxLevel = Math.max(...Object.values(levelMap), 4);
+        
+        graphData.nodes.forEach(n => {
+            if (levelMap[n.id] === undefined) {
+                // Assign by timestamp if available
+                const ts = nodeFirstTs[n.id];
+                if (ts && ts > 0 && ts < Infinity) {
+                    levelMap[n.id] = Math.round(((ts - minGlobalTs) / tsRange) * maxLevel);
+                } else {
+                    // Fallback: sinks at the right, others in the middle
+                    const role = (n.role || '').toLowerCase();
+                    if (SINK_ROLES.has(role)) {
+                        levelMap[n.id] = maxLevel + 1;
+                    } else {
+                        levelMap[n.id] = Math.round(maxLevel / 2);
+                    }
+                }
+            }
+        });
+        
+        // Force sinks to the rightmost level
+        graphData.nodes.forEach(n => {
+            const role = (n.role || '').toLowerCase();
+            if (SINK_ROLES.has(role)) {
+                levelMap[n.id] = Math.max(levelMap[n.id] || 0, maxLevel + 1);
+            }
+        });
+        
+        // ── Build vis.js nodes ─────────────────────────────────────
         const visNodes = graphData.nodes.map(n => {
             const vol = nodeVolume[n.id] || 0;
             const degree = (nodeInDegree[n.id] || 0) + (nodeOutDegree[n.id] || 0);
-            const isHighVolume = vol > p90Volume;
-            const isHub = degree > 10;
-            const isLeaf = degree <= 1;
-            
-            // Color logic
-            let palette;
-            if (n.is_case_wallet) {
-                palette = COLORS.caseWallet;
-            } else if (isHighVolume && isHub) {
-                palette = COLORS.exchange;
-            } else if (isHighVolume) {
-                palette = COLORS.highVolume;
-            } else if (isHub) {
-                palette = COLORS.hub;
-            } else if (isLeaf) {
-                palette = COLORS.leaf;
-            } else {
-                palette = COLORS.external;
-            }
+            const role = (n.role || 'external').toLowerCase();
+            const palette = getColor(role);
+            const isCaseWallet = n.is_case_wallet;
             
             // Size: log scale, min 8, max 45
             const baseSize = 8 + Math.log10(Math.max(vol, 1)) * 4;
             const size = Math.max(8, Math.min(baseSize, 45));
             
-            return {
+            // Label: show for case wallets + role + high-degree
+            let label = '';
+            if (isCaseWallet) {
+                label = n.label + '\n(' + role + ')';
+            } else if (degree > 8) {
+                label = n.label;
+            }
+            
+            const nodeObj = {
                 id: n.id,
-                label: n.is_case_wallet ? n.label : (degree > 5 ? n.label : ''),
+                label: label,
                 color: {
                     background: palette.bg,
                     border: palette.border,
@@ -843,17 +1019,24 @@
                     hover: { background: palette.bg, border: '#f8fafc' }
                 },
                 size: size,
-                borderWidth: n.is_case_wallet ? 3 : 1.5,
+                borderWidth: isCaseWallet ? 3 : 1.5,
                 shadow: {
-                    enabled: n.is_case_wallet || isHighVolume,
+                    enabled: isCaseWallet || vol > p90Volume,
                     color: palette.glow,
-                    size: n.is_case_wallet ? 15 : 8
+                    size: isCaseWallet ? 15 : 8
                 },
-                title: `${n.id}\nVolume: ${formatVolume(vol)}\nConnections: ${degree}`
+                title: `${n.id}\nRole: ${role}\nVolume: ${formatVolume(vol)}\nConnections: ${degree}\nLevel: ${levelMap[n.id] || 0}`
             };
+            
+            // Assign level for hierarchical layout
+            if (currentLayout === 'flow') {
+                nodeObj.level = levelMap[n.id] || 0;
+            }
+            
+            return nodeObj;
         });
         
-        // Transform edges
+        // ── Build vis.js edges ─────────────────────────────────────
         const visEdges = graphData.edges.map(e => {
             const val = e.value || 0;
             const width = 0.5 + Math.log10(Math.max(val, 1)) * 0.4;
@@ -870,7 +1053,9 @@
                     highlight: '#6366f1',
                     hover: '#8b5cf6'
                 },
-                smooth: { type: 'curvedCW', roundness: 0.15 }
+                smooth: currentLayout === 'flow' 
+                    ? { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 }
+                    : { type: 'curvedCW', roundness: 0.15 }
             };
         });
         
@@ -885,7 +1070,7 @@
         document.getElementById('graph-volume').textContent = formatVolume(totalVolume);
         document.getElementById('data-source').textContent = 'Investigation Transfers';
         
-        showNotification(`Loaded ${visEdges.length} transfers from ${visNodes.length} wallets`, 'success');
+        showNotification(`Loaded ${visEdges.length} transfers from ${visNodes.length} wallets (${currentLayout} layout)`, 'success');
         
         // Fit the network
         setTimeout(() => {

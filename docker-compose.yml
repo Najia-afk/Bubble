@@ -84,6 +84,8 @@ services:
       - ./templates:/app/templates
       - ./static:/app/static
       - ./notebooks:/app/notebooks
+      - ./api:/app/api
+      - ./graphql_app:/app/graphql_app
     depends_on:
       postgres:
         condition: service_healthy

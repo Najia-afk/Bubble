@@ -235,6 +235,8 @@ def get_investigation_graph(investigation_id):
         return jsonify({"error": "Investigation not found"}), 404
 
     wallet_set = {w.address.lower() for w in investigation.wallets}
+    wallet_roles = {w.address.lower(): (w.role or 'related') for w in investigation.wallets}
+    wallet_depths = {w.address.lower(): (w.depth or 0) for w in investigation.wallets}
     start_block = int(request.args.get('start_block', 1))
     end_block = int(request.args.get('end_block', 999999999))
     limit = int(request.args.get('limit', 500))
@@ -265,9 +267,19 @@ def get_investigation_graph(investigation_id):
                 continue
 
             if from_addr not in nodes:
-                nodes[from_addr] = {"id": from_addr, "label": f"{from_addr[:6]}...{from_addr[-4:]}", "is_case_wallet": is_case_from}
+                nodes[from_addr] = {
+                    "id": from_addr, "label": f"{from_addr[:6]}...{from_addr[-4:]}",
+                    "is_case_wallet": is_case_from,
+                    "role": wallet_roles.get(from_addr, 'external'),
+                    "depth": wallet_depths.get(from_addr, -1)
+                }
             if to_addr not in nodes:
-                nodes[to_addr] = {"id": to_addr, "label": f"{to_addr[:6]}...{to_addr[-4:]}", "is_case_wallet": is_case_to}
+                nodes[to_addr] = {
+                    "id": to_addr, "label": f"{to_addr[:6]}...{to_addr[-4:]}",
+                    "is_case_wallet": is_case_to,
+                    "role": wallet_roles.get(to_addr, 'external'),
+                    "depth": wallet_depths.get(to_addr, -1)
+                }
 
             raw_val = t.value or 0
             decimals = t.token_decimals or 0
