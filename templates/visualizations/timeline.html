@@ -50,7 +50,7 @@
     
     <div class="controls">
         <label>Investigation:</label>
-        <input id="inv-id" type="number" value="1" min="1" style="width: 60px;">
+        <input id="inv-id" type="number" value="{{ investigation_id or 1 }}" min="1" style="width: 60px;">
         <button onclick="loadData()">Load</button>
         <span style="width:1px; background:#3a3a4a; height:20px;"></span>
         <label>Layout:</label>
@@ -244,6 +244,11 @@
             
             panel.style.display = 'block';
         }
+
+        // Auto-load if investigation_id provided via URL
+        {% if investigation_id %}
+        document.addEventListener('DOMContentLoaded', function() { loadData(); });
+        {% endif %}
     </script>
 </body>
 </html>

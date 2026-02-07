@@ -1,0 +1,44 @@
+{
+  "RandomForest": {
+    "cv_f1": 0.9314,
+    "test_acc": 0.8533,
+    "test_f1": 0.7242,
+    "gap": -0.2072,
+    "time": 15.7
+  },
+  "GradientBoosting": {
+    "cv_f1": 0.9427,
+    "test_acc": 0.8667,
+    "test_f1": 0.7371,
+    "gap": -0.2057,
+    "time": 268.4
+  },
+  "ExtraTrees": {
+    "cv_f1": 0.9497,
+    "test_acc": 0.8667,
+    "test_f1": 0.8377,
+    "gap": -0.112,
+    "time": 21.4
+  },
+  "LogisticRegression": {
+    "cv_f1": 0.7788,
+    "test_acc": 0.7733,
+    "test_f1": 0.6349,
+    "gap": -0.1439,
+    "time": 3.6
+  },
+  "XGBoost": {
+    "cv_f1": 0.9375,
+    "test_acc": 0.8667,
+    "test_f1": 0.7899,
+    "gap": -0.1476,
+    "time": 89.3
+  },
+  "LightGBM": {
+    "cv_f1": 0.935,
+    "test_acc": 0.8667,
+    "test_f1": 0.7523,
+    "gap": -0.1827,
+    "time": 57.0
+  }
+}

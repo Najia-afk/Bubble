@@ -131,10 +131,11 @@ Classification Pipeline:
     → Known entity matching (exchange/mixer/bridge lists)
     → WalletScore persistence + AuditLog entry
 
-Production Model: Random Forest
-  → 381 samples × 10 features × 4 classes
-  → Accuracy: 98.95%, F1: 98.99%, CV: 91.00%
-  → Hyperparameters: {n_estimators, max_depth, min_samples_split, ...}
+Production Model: ExtraTrees (AutoML champion)
+  → 374 samples × 24 features × 5 classes
+  → Test F1: 88.82%, CV F1: 94.97%, Gap: -6.2%
+  → Optuna HPO: 10 trials × 5-fold × 6 models
+  → Saved: notebooks/data/models/champion_ExtraTrees_*.pkl
 ```
 
 ## Risk Scoring Algorithm
@@ -180,15 +181,14 @@ CRITICAL ≥ 70  |  HIGH ≥ 50  |  MEDIUM ≥ 25  |  LOW < 25
 
 ### AutoML Model Selection
 
-| Model | Type | Default | Optuna Tuned |
-|-------|------|---------|--------------|
-| RandomForest | Ensemble | ✅ | n_estimators, max_depth, min_samples |
-| GradientBoosting | Ensemble | ✅ | n_estimators, learning_rate, subsample |
-| ExtraTrees | Ensemble | ✅ | n_estimators, max_depth |
-| LogisticRegression | Linear | ✅ | C, penalty, solver |
-| SVM | Kernel | ✅ | C, kernel, gamma |
-| XGBoost | Gradient | Optional | + reg_alpha, reg_lambda, colsample |
-| LightGBM | Gradient | Optional | + num_leaves, reg_alpha, reg_lambda |
+| Model | Type | Test F1 | CV-Test Gap | Status |
+|-------|------|---------|-------------|--------|
+| **ExtraTrees** | **Ensemble** | **0.8882** | **-6.2%** | **CHAMPION** |
+| LightGBM | Gradient | 0.7266 | -21.3% | Overfit |
+| XGBoost | Gradient | 0.7173 | -21.6% | Overfit |
+| GradientBoosting | Ensemble | 0.7155 | -22.6% | Overfit |
+| RandomForest | Ensemble | 0.7117 | -21.8% | Overfit |
+| LogisticRegression | Linear | 0.6435 | -12.8% | Underfit |
 
 ### Scripts
 

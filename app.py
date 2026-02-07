@@ -155,7 +155,7 @@ def create_app():
     @app.route('/timeline/<int:investigation_id>')
     def timeline_page(investigation_id=None):
         """Interactive timeline visualization (vis.js)"""
-        return render_template('visualizations/timeline.html')
+        return render_template('visualizations/timeline.html', investigation_id=investigation_id)
     
     # ========================================================================
     # INVESTIGATION & ML PAGES

@@ -116,15 +116,32 @@ curl http://localhost:8080/api/investigations/2/wallets | jq '.'
 curl http://localhost:8080/api/investigations/2/transfers | jq '.total'
 ```
 
-### Step 6 — Visualize Graph
+### Step 6 — Visualize Graph & Timeline
 
+**Transaction Graph:**
 Open in browser: http://localhost:8080/graph?investigation_id=2
 
 The graph shows:
-- **Node colors**: 6-tier classification-based coloring
+- **Node colors**: Classification-based coloring (attacker=red, exchange=blue, mixer=purple, suspect=orange, related=gray)
 - **Node sizes**: Normalized by transfer volume
-- **Edges**: Fund flows with amounts
+- **Edges**: Fund flows with amounts and timestamps
 - **Physics**: vis.js Barnes-Hut simulation
+- **Date filter**: Filter edges by timestamp range
+
+**Timeline View:**
+Open in browser: http://localhost:8080/timeline/2
+
+The timeline shows:
+- **X-axis**: Real timestamps (first-seen time per wallet)
+- **Y-axis**: BFS depth from seed wallets
+- **Nodes**: Colored by classification, positioned chronologically
+- **Edge tooltips**: First/last transaction dates
+- **Layouts**: Timeline (default), Hierarchical, Force-directed
+
+**Investigation Detail (combined view):**
+Open in browser: http://localhost:8080/investigations/2
+
+Includes 5 tabs: Summary, Wallets, Graph (iframe), Timeline, Transfers
 
 ### Step 7 — ML Model Check
 
@@ -134,12 +151,21 @@ curl http://localhost:8080/api/ml/stats | jq '.'
 
 # All trained models
 curl http://localhost:8080/api/ml/models | jq '.models[] | {name, version, accuracy, is_production}'
-
-# Retrain if needed (triggers Celery task)
-curl -X POST http://localhost:8080/api/ml/train \
-  -H "Content-Type: application/json" \
-  -d '{"model_type": "random_forest"}'
 ```
+
+**AutoML Pipeline (for retraining):**
+```bash
+# Option A: Host execution (recommended)
+.venv\Scripts\python -X utf8 notebooks/_host_pipeline.py
+
+# Option B: Docker execution
+docker exec bubble_web python notebooks/_host_pipeline.py
+
+# Check results
+cat notebooks/data/models/results_*.json | python -m json.tool
+```
+
+**Current champion**: ExtraTrees (Test F1=0.8882, 89.6% overall accuracy on 374 wallets)
 
 ### Step 8 — Audit Trail
 
