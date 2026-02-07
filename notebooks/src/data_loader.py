@@ -33,10 +33,21 @@ class DataLoader:
         self._session_factory = None
 
     def _resolve_db_url(self) -> str:
-        """Resolve DB URL from environment."""
+        """Resolve DB URL from environment.
+        Priority: DATABASE_URL env > individual POSTGRES_* env vars > .env file > default localhost.
+        """
         url = os.environ.get('DATABASE_URL')
         if url:
             return url
+
+        # Build from individual POSTGRES_* env vars (works inside Docker)
+        pg_host = os.environ.get('POSTGRES_HOST')
+        if pg_host:
+            pg_user = os.environ.get('POSTGRES_USER', 'bubble_user')
+            pg_pass = os.environ.get('POSTGRES_PASSWORD', 'bubble_password')
+            pg_db = os.environ.get('POSTGRES_DB', 'bubble_db')
+            pg_port = os.environ.get('POSTGRES_PORT', '5432')
+            return f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}'
 
         # Try loading from .env
         env_path = os.path.join(PROJECT_ROOT, '.env')
@@ -47,8 +58,8 @@ class DataLoader:
                     if line.startswith('DATABASE_URL='):
                         return line.split('=', 1)[1].strip('"').strip("'")
 
-        # Default local Docker setup
-        return 'postgresql://bubble:bubble@localhost:5432/bubbledb'
+        # Default local setup (host machine with Docker postgres port-forwarded)
+        return 'postgresql://bubble_user:bubble_password@localhost:5432/bubble_db'
 
     @property
     def session(self):

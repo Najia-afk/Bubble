@@ -45,7 +45,7 @@ class PCAAnalysis:
         self.pca = PCA(n_components=self.n_components)
         self.X_pca = self.pca.fit_transform(df[self.features].fillna(0))
         
-        print(f"✅ PCA fitted with {self.n_components} components")
+        print(f"[OK] PCA fitted with {self.n_components} components")
         print(f"   Total variance explained: {self.pca.explained_variance_ratio_.sum():.1%}")
     
     def get_loadings(self) -> pd.DataFrame:

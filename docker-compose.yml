@@ -8,9 +8,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bubble_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # Port only exposed internally - access via nginx
-    expose:
-      - "5432"
+    # Port exposed for local ML notebook access
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bubble_user}"]
       interval: 10s
@@ -83,6 +83,7 @@ services:
       - ./logs:/app/logs
       - ./templates:/app/templates
       - ./static:/app/static
+      - ./notebooks:/app/notebooks
     depends_on:
       postgres:
         condition: service_healthy

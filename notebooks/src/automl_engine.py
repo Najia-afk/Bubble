@@ -359,7 +359,7 @@ class BubbleAutoML:
         print("=" * 60)
 
         # 1. Load data
-        print("\n📊 Step 1: Loading training data...")
+        print("\n[INFO] Step 1: Loading training data...")
         X, y, self.feature_names = prepare_training_data(self.loader)
         print(f"   Samples: {len(X)}, Features: {len(self.feature_names)}, Classes: {y.nunique()}")
         class_dist = y.value_counts().to_dict()
@@ -385,9 +385,9 @@ class BubbleAutoML:
                     self.X_train, self.y_train = smote.fit_resample(self.X_train, self.y_train)
                     print(f"   ⚖️  SMOTE applied: {len(self.X_train)} samples (k={k})")
                 else:
-                    print("   ⚠️  Skipping SMOTE — min class too small")
+                    print("   [WARN]  Skipping SMOTE — min class too small")
             except ImportError:
-                print("   ⚠️  imblearn not installed — skipping SMOTE")
+                print("   [WARN]  imblearn not installed — skipping SMOTE")
 
         # 4. Scale features
         from sklearn.preprocessing import StandardScaler
@@ -441,7 +441,7 @@ class BubbleAutoML:
                       f"| CV: {cv_score:.4f} | Gap: {gap:+.4f} | {metrics['tuning_time']:.1f}s")
 
             except Exception as e:
-                print(f"      ❌ Failed: {e}")
+                print(f"      [ERROR] Failed: {e}")
                 self.results[model_name] = {'error': str(e)}
 
         # 6. Select best
@@ -453,13 +453,13 @@ class BubbleAutoML:
 
         # 7. Summary
         print("\n" + "=" * 60)
-        print("📊 RESULTS LEADERBOARD")
+        print("[INFO] RESULTS LEADERBOARD")
         print("=" * 60)
         sorted_results = sorted(valid_results.items(), key=lambda x: x[1]['f1_weighted'], reverse=True)
         for rank, (name, m) in enumerate(sorted_results, 1):
             medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "  "
             cv_gap = m['accuracy'] - m.get('cv_score', 0) if m.get('cv_score', 0) > 0 else 0
-            flag = " ⚠️OVERFIT" if cv_gap > 0.1 else ""
+            flag = " [WARN]OVERFIT" if cv_gap > 0.1 else ""
             print(f"   {medal} #{rank} {name:<22} F1={m['f1_weighted']:.4f}  "
                   f"Acc={m['accuracy']:.4f}  CV={m.get('cv_score', 0):.4f}  "
                   f"Gap={cv_gap:+.3f}{flag}")
@@ -472,7 +472,7 @@ class BubbleAutoML:
     def promote_best(self, experiment_name: str = 'wallet_classification') -> Optional[str]:
         """Register and promote the best model to MLflow Production."""
         if not self.best_model:
-            print("❌ No model to promote — run AutoML first")
+            print("[ERROR] No model to promote — run AutoML first")
             return None
 
         try:
@@ -496,11 +496,11 @@ class BubbleAutoML:
                 mlflow.sklearn.log_model(self.best_model, 'model')
                 run_id = mlflow.active_run().info.run_id
 
-            print(f"✅ Model logged to MLflow: {self.best_model_name} (run_id={run_id[:8]}...)")
+            print(f"[OK] Model logged to MLflow: {self.best_model_name} (run_id={run_id[:8]}...)")
             return run_id
 
         except Exception as e:
-            print(f"⚠️  MLflow unavailable ({e}) — saving model locally")
+            print(f"[WARN]  MLflow unavailable ({e}) — saving model locally")
             return self._save_local()
 
     def _save_local(self) -> str:
@@ -547,7 +547,7 @@ class BubbleAutoML:
         sorted_r = sorted(valid.items(), key=lambda x: x[1]['f1_weighted'], reverse=True)
         for rank, (name, m) in enumerate(sorted_r, 1):
             gap = m['accuracy'] - m.get('cv_score', 0) if m.get('cv_score', 0) > 0 else 0
-            flag = " ⚠️" if gap > 0.1 else ""
+            flag = " [WARN]" if gap > 0.1 else ""
             lines.append(
                 f"| {rank} | {name} | {m['f1_weighted']:.4f} | {m['accuracy']:.4f} "
                 f"| {m.get('cv_score', 0):.4f} | {gap:+.3f}{flag} | {m.get('tuning_time', 0):.1f}s |"
@@ -583,11 +583,11 @@ class BubbleAutoML:
             "",
         ])
         if len(self.X_train) < 500:
-            lines.append(f"- ⚠️ **Low training data** ({len(self.X_train)} samples) — target 2000+ for production")
+            lines.append(f"- [WARN] **Low training data** ({len(self.X_train)} samples) — target 2000+ for production")
         if valid:
             best_gap = sorted_r[0][1]['accuracy'] - sorted_r[0][1].get('cv_score', 0)
             if best_gap > 0.08:
-                lines.append(f"- ⚠️ **Potential overfitting** — {best_gap:.1%} gap between test and CV scores")
+                lines.append(f"- [WARN] **Potential overfitting** — {best_gap:.1%} gap between test and CV scores")
         if len(self.feature_names) < 20:
             lines.append(f"- 📈 **Feature expansion** — only {len(self.feature_names)} features, add temporal/network/risk features")
         lines.append("- 🔄 Retrain after adding new investigation data")

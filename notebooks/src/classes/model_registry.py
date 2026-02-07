@@ -16,7 +16,7 @@ try:
     MLFLOW_AVAILABLE = True
 except ImportError:
     MLFLOW_AVAILABLE = False
-    print("⚠️ MLflow not available. Install with: pip install mlflow")
+    print("[WARN] MLflow not available. Install with: pip install mlflow")
 
 
 class ModelRegistry:
@@ -58,7 +58,7 @@ class ModelRegistry:
         
         self.client = MlflowClient()
         
-        print(f"✅ Connected to MLflow at {self.tracking_uri}")
+        print(f"[OK] Connected to MLflow at {self.tracking_uri}")
         print(f"   Experiment: {experiment_name} (ID: {self.experiment_id})")
     
     def log_clustering_run(self,
@@ -133,7 +133,7 @@ class ModelRegistry:
                     mlflow.set_tag(key, value)
             
             run_id = run.info.run_id
-            print(f"✅ Logged run: {run_name} (ID: {run_id})")
+            print(f"[OK] Logged run: {run_name} (ID: {run_id})")
             
             return run_id
     
@@ -158,7 +158,7 @@ class ModelRegistry:
         result = mlflow.register_model(model_uri, model_name)
         
         version = result.version
-        print(f"✅ Registered model: {model_name} v{version}")
+        print(f"[OK] Registered model: {model_name} v{version}")
         
         return version
     
@@ -191,7 +191,7 @@ class ModelRegistry:
             versions = self.client.search_model_versions(f"name='{model_name}'")
             
             if not versions:
-                print(f"❌ No versions found for model: {model_name}")
+                print(f"[ERROR] No versions found for model: {model_name}")
                 return False
             
             if version is None:
@@ -214,11 +214,11 @@ class ModelRegistry:
                             best_version = v.version
                 
                 if best_version is None:
-                    print(f"❌ No versions found with metric: {metric_name}")
+                    print(f"[ERROR] No versions found with metric: {metric_name}")
                     return False
                 
                 version = best_version
-                print(f"📊 Best version by {metric_name}: v{version} ({best_metric:.4f})")
+                print(f"[INFO] Best version by {metric_name}: v{version} ({best_metric:.4f})")
             
             # Set alias (MLflow 2.0+)
             try:
@@ -236,7 +236,7 @@ class ModelRegistry:
             return True
             
         except Exception as e:
-            print(f"❌ Error promoting model: {e}")
+            print(f"[ERROR] Error promoting model: {e}")
             return False
     
     def get_champion_model(self, model_name: str = "bubble_cluster_model"):
@@ -262,18 +262,18 @@ class ModelRegistry:
                 # Fallback to stage
                 versions = self.client.get_latest_versions(model_name, stages=["Production"])
                 if not versions:
-                    print(f"❌ No champion model found for: {model_name}")
+                    print(f"[ERROR] No champion model found for: {model_name}")
                     return None
                 model_version = versions[0]
                 model_uri = f"models:/{model_name}/Production"
             
             model = mlflow.sklearn.load_model(model_uri)
-            print(f"✅ Loaded champion model: {model_name} v{model_version.version}")
+            print(f"[OK] Loaded champion model: {model_name} v{model_version.version}")
             
             return model
             
         except Exception as e:
-            print(f"❌ Error loading champion: {e}")
+            print(f"[ERROR] Error loading champion: {e}")
             return None
     
     def compare_with_champion(self,
@@ -326,16 +326,16 @@ class ModelRegistry:
                 result['improvement'] = result['new_metric'] - champion_value
                 result['is_better'] = result['new_metric'] > champion_value
                 
-                print(f"📊 Champion {metric_name}: {champion_value:.4f}")
-                print(f"📊 New model {metric_name}: {result['new_metric']:.4f}")
+                print(f"[INFO] Champion {metric_name}: {champion_value:.4f}")
+                print(f"[INFO] New model {metric_name}: {result['new_metric']:.4f}")
                 
                 if result['is_better']:
-                    print(f"✅ New model is BETTER by {result['improvement']:.4f}")
+                    print(f"[OK] New model is BETTER by {result['improvement']:.4f}")
                 else:
-                    print(f"❌ New model is worse by {abs(result['improvement']):.4f}")
+                    print(f"[ERROR] New model is worse by {abs(result['improvement']):.4f}")
             
         except Exception as e:
-            print(f"⚠️ Could not compare with champion: {e}")
+            print(f"[WARN] Could not compare with champion: {e}")
             result['is_better'] = True  # Promote if comparison fails
         
         return result

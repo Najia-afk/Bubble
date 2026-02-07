@@ -61,7 +61,7 @@ class WalletFeatureExtractor:
         if 'timestamp' in self.transfers.columns and not pd.api.types.is_datetime64_any_dtype(self.transfers['timestamp']):
             self.transfers['timestamp'] = pd.to_datetime(self.transfers['timestamp'])
         
-        print(f"✅ Initialized with {len(self.transfers):,} transfers")
+        print(f"[OK] Initialized with {len(self.transfers):,} transfers")
     
     def _calculate_entropy(self, values: pd.Series) -> float:
         """Calculate Shannon entropy of value distribution."""
@@ -223,7 +223,7 @@ class WalletFeatureExtractor:
         to_addresses = set(self.transfers['to_address'].str.lower().unique())
         all_addresses = from_addresses | to_addresses
         
-        print(f"📊 Found {len(all_addresses):,} unique wallets")
+        print(f"[INFO] Found {len(all_addresses):,} unique wallets")
         
         # Extract features for each wallet
         features_list = []
@@ -243,7 +243,7 @@ class WalletFeatureExtractor:
             cols = ['address'] + [c for c in df.columns if c != 'address']
             df = df[cols]
         
-        print(f"✅ Extracted features for {len(df):,} wallets (min {min_tx_count} txs)")
+        print(f"[OK] Extracted features for {len(df):,} wallets (min {min_tx_count} txs)")
         return df
     
     def normalize_features(self, df: pd.DataFrame, 
@@ -282,5 +282,5 @@ class WalletFeatureExtractor:
             'feature_names': numeric_cols
         }
         
-        print(f"✅ Normalized {len(numeric_cols)} features using {method} scaling")
+        print(f"[OK] Normalized {len(numeric_cols)} features using {method} scaling")
         return df_normalized, scaler_params
