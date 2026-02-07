@@ -1,0 +1,92 @@
+{
+  "skill_id": "ml_classification",
+  "version": "1.0.0",
+  "name": "ML Wallet Classification Skill",
+  "description": "Classify cryptocurrency wallets using a production Random Forest model, heuristic rules, and known-entity matching. Supports batch and single-wallet classification.",
+  "category": "ml",
+  "trigger": {
+    "type": "api",
+    "endpoints": [
+      "POST /api/classify",
+      "POST /api/classify/batch"
+    ]
+  },
+  "inputs": {
+    "address": {
+      "type": "string",
+      "required": true,
+      "description": "Wallet address (0x...)"
+    },
+    "chain_code": {
+      "type": "string",
+      "required": false,
+      "default": "ETH",
+      "description": "Chain trigram (ETH, BSC, POL, ARB, BASE, OP)"
+    }
+  },
+  "pipeline": [
+    {
+      "step": "feature_extraction",
+      "module": "api.services.feature_engineer",
+      "class": "WalletFeatureEngineer",
+      "description": "Extracts 50+ features across 6 categories from on-chain data",
+      "feature_categories": {
+        "transaction": ["tx_count_total", "tx_count_in", "tx_count_out", "ratio_in_out", "frequency_daily", "frequency_hourly"],
+        "value": ["total_volume", "volume_in", "volume_out", "volume_net", "avg_tx_value", "median_tx_value", "max_tx_value", "min_tx_value", "std_tx_value", "skewness", "kurtosis", "large_tx_count", "small_tx_count", "round_number_ratio"],
+        "temporal": ["active_days", "first_seen_days_ago", "last_seen_days_ago", "activity_span", "avg_time_between_tx", "weekend_tx_ratio", "night_tx_ratio", "burst_activity_score", "regularity_score"],
+        "network": ["unique_counterparties", "unique_senders", "unique_receivers", "counterparty_concentration", "top_counterparty_ratio", "self_transfer_count", "contract_interaction_ratio"],
+        "risk": ["mixer_interaction_count", "bridge_interaction_count", "exchange_interaction_count", "new_wallet_interaction_ratio", "high_risk_counterparty_count", "dust_attack_indicator", "wash_trading_score", "layering_score"],
+        "behavioral": ["consolidation_pattern", "distribution_pattern", "dormancy_reactivation", "velocity_change_rate", "behavioral_entropy", "predictability_score"]
+      }
+    },
+    {
+      "step": "ml_prediction",
+      "module": "api.services.ml_trainer",
+      "class": "WalletMLTrainer",
+      "description": "Production Random Forest model prediction",
+      "model_info": {
+        "algorithm": "RandomForest",
+        "n_features": 10,
+        "n_classes": 4,
+        "accuracy": 0.9895,
+        "f1_score": 0.9899,
+        "cross_validation": 0.91
+      },
+      "label_encoding": {
+        "0": "unknown", "1": "exchange", "2": "bridge", "3": "mixer",
+        "4": "defi", "5": "whale", "6": "bot", "7": "normal",
+        "8": "attacker", "9": "suspect"
+      }
+    },
+    {
+      "step": "heuristic_classification",
+      "module": "api.services.wallet_classifier",
+      "class": "WalletClassifier",
+      "description": "Rule-based classification using transaction pattern thresholds",
+      "heuristic_types": ["exchange", "bridge", "whale", "bot", "mixer", "normal"]
+    },
+    {
+      "step": "known_entity_matching",
+      "module": "api.services.data_access",
+      "description": "Match against known exchange, mixer, bridge address databases",
+      "databases": ["known_bridges (config/data/bridges.csv)", "known_mixers (config/data/mixers.csv)", "wallet_labels (user-tagged)"]
+    },
+    {
+      "step": "score_persistence",
+      "description": "Save WalletScore to DB + create AuditLog entry for EU AI Act compliance"
+    }
+  ],
+  "outputs": {
+    "predicted_type": "string (exchange|bridge|mixer|normal|whale|bot|attacker|suspect)",
+    "confidence": "float (0-1)",
+    "scores": {
+      "exchange_score": "float",
+      "bridge_score": "float",
+      "mixer_score": "float",
+      "defi_score": "float",
+      "whale_score": "float",
+      "bot_score": "float"
+    },
+    "source": "string (ml_model|heuristic|known)"
+  }
+}

@@ -4,311 +4,76 @@
 
 {% block extra_css %}
 <style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-    
-    .page-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-    
-    .page-subtitle {
-        color: var(--text-secondary);
-        margin-top: 0.25rem;
-    }
-    
-    .btn-primary {
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        transition: all 0.2s;
-    }
-    
-    .btn-primary:hover {
-        background: var(--primary-hover);
-        transform: translateY(-1px);
-    }
-    
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin-bottom: 2rem;
-    }
-    
-    .stat-card {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 1.25rem;
-    }
-    
-    .stat-card h4 {
-        color: var(--text-secondary);
-        font-size: 0.875rem;
-        font-weight: 500;
-        margin-bottom: 0.5rem;
-    }
-    
-    .stat-card .value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-    
-    .stat-card .change {
-        font-size: 0.75rem;
-        margin-top: 0.25rem;
-    }
-    
-    .stat-card .change.positive { color: var(--success); }
-    .stat-card .change.negative { color: var(--danger); }
-    
+    /* Page-specific: investigations table */
     .investigations-table {
         width: 100%;
         border-collapse: collapse;
-        background: var(--card-bg);
+        background: var(--bg-secondary);
         border-radius: 12px;
         overflow: hidden;
-        border: 1px solid var(--border);
+        border: 1px solid var(--border-color);
     }
-    
     .investigations-table th,
     .investigations-table td {
         padding: 1rem;
         text-align: left;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid var(--border-color);
     }
-    
     .investigations-table th {
-        background: var(--bg-secondary);
+        background: rgba(0, 0, 0, 0.25);
         font-weight: 600;
         color: var(--text-secondary);
         font-size: 0.75rem;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
-    
-    .investigations-table tr:hover {
-        background: var(--bg-hover);
-    }
-    
-    .investigations-table tr:last-child td {
-        border-bottom: none;
-    }
-    
-    .status-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    
-    .status-badge.open {
-        background: rgba(59, 130, 246, 0.1);
-        color: #3b82f6;
-    }
-    
-    .status-badge.in_progress {
-        background: rgba(245, 158, 11, 0.1);
-        color: #f59e0b;
-    }
-    
-    .status-badge.closed {
-        background: rgba(34, 197, 94, 0.1);
-        color: #22c55e;
-    }
-    
-    .priority-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    
-    .priority-badge.high { color: #ef4444; }
-    .priority-badge.medium { color: #f59e0b; }
-    .priority-badge.low { color: #22c55e; }
-    
+    .investigations-table tr:hover { background: rgba(99, 102, 241, 0.04); }
+    .investigations-table tr:last-child td { border-bottom: none; }
+
+    /* Page-specific badges */
+    .priority-badge { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; font-weight: 600; }
+    .priority-badge.high { color: var(--danger); }
+    .priority-badge.medium { color: var(--warning); }
+    .priority-badge.low { color: var(--success); }
+
     .wallet-count {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-        background: var(--bg-secondary);
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        font-size: 0.875rem;
+        display: inline-flex; align-items: center; gap: 0.25rem;
+        background: var(--bg-tertiary); padding: 0.25rem 0.5rem;
+        border-radius: 4px; font-size: 0.875rem;
     }
-    
+
     .action-btn {
-        background: none;
-        border: 1px solid var(--border);
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        cursor: pointer;
-        color: var(--text-primary);
-        font-size: 0.875rem;
-        transition: all 0.2s;
+        background: none; border: 1px solid var(--border-color);
+        padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;
+        color: var(--text-primary); font-size: 0.875rem; transition: all 0.2s;
     }
-    
-    .action-btn:hover {
-        background: var(--bg-hover);
-        border-color: var(--primary);
-        color: var(--primary);
-    }
-    
-    .empty-state {
-        text-align: center;
-        padding: 4rem 2rem;
-        color: var(--text-secondary);
-    }
-    
-    .empty-state svg {
-        width: 64px;
-        height: 64px;
-        margin-bottom: 1rem;
-        opacity: 0.5;
-    }
-    
-    .filters {
-        display: flex;
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-        flex-wrap: wrap;
-    }
-    
-    .filter-select {
-        padding: 0.5rem 1rem;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--card-bg);
-        color: var(--text-primary);
-        font-size: 0.875rem;
-    }
-    
+    .action-btn:hover { background: var(--bg-hover); border-color: var(--accent-primary); color: var(--accent-primary); }
+
+    /* Filters */
+    .filters { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
     .search-input {
-        padding: 0.5rem 1rem;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--card-bg);
-        color: var(--text-primary);
-        font-size: 0.875rem;
-        min-width: 250px;
+        padding: 0.5rem 1rem; border: 1px solid var(--border-color);
+        border-radius: 6px; background: var(--bg-secondary);
+        color: var(--text-primary); font-size: 0.875rem; min-width: 250px;
     }
-    
-    /* Modal styles */
-    .modal-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 1000;
-        justify-content: center;
-        align-items: center;
-    }
-    
-    .modal-overlay.active {
-        display: flex;
-    }
-    
-    .modal {
-        background: var(--card-bg);
-        border-radius: 12px;
-        padding: 2rem;
-        max-width: 600px;
-        width: 90%;
-        max-height: 90vh;
-        overflow-y: auto;
-    }
-    
-    .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-    }
-    
-    .modal-title {
-        font-size: 1.25rem;
+    .search-input:focus { border-color: var(--accent-primary); outline: none; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); }
+
+    /* Stat card value styling */
+    .stat-card .value {
+        font-size: 2rem;
         font-weight: 700;
+        color: var(--text-primary);
     }
-    
-    .modal-close {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
+    .stat-card h4 {
         color: var(--text-secondary);
-    }
-    
-    .form-group {
-        margin-bottom: 1rem;
-    }
-    
-    .form-group label {
-        display: block;
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-        color: var(--text-primary);
-    }
-    
-    .form-group input,
-    .form-group textarea,
-    .form-group select {
-        width: 100%;
-        padding: 0.75rem;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
         font-size: 0.875rem;
-    }
-    
-    .form-group textarea {
-        min-height: 100px;
-        resize: vertical;
-    }
-    
-    .form-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-    }
-    
-    .form-actions {
-        display: flex;
-        gap: 1rem;
-        justify-content: flex-end;
-        margin-top: 1.5rem;
-    }
-    
-    .btn-secondary {
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        border: 1px solid var(--border);
-        padding: 0.75rem 1.5rem;
-        border-radius: 8px;
-        cursor: pointer;
         font-weight: 500;
+        margin-bottom: 0.5rem;
     }
+
+    /* Form rows */
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
 </style>
 {% endblock %}
 
@@ -318,7 +83,7 @@
         <h1 class="page-title">🔍 Investigations</h1>
         <p class="page-subtitle">Forensic case management for blockchain fund tracking</p>
     </div>
-    <button class="btn-primary" onclick="openCreateModal()">
+    <button class="btn btn-primary" onclick="openCreateModal()">
         <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
             <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
         </svg>
@@ -329,20 +94,20 @@
 <!-- Stats -->
 <div class="stats-grid">
     <div class="stat-card">
-        <h4>Total Cases</h4>
-        <div class="value" id="totalCases">-</div>
+        <div class="stat-label">Total Cases</div>
+        <div class="stat-value" id="totalCases" style="color: var(--accent-primary)">-</div>
     </div>
     <div class="stat-card">
-        <h4>Open Cases</h4>
-        <div class="value" id="openCases">-</div>
+        <div class="stat-label">Open Cases</div>
+        <div class="stat-value" id="openCases" style="color: var(--success)">-</div>
     </div>
     <div class="stat-card">
-        <h4>In Progress</h4>
-        <div class="value" id="inProgressCases">-</div>
+        <div class="stat-label">In Progress</div>
+        <div class="stat-value" id="inProgressCases" style="color: var(--warning)">-</div>
     </div>
     <div class="stat-card">
-        <h4>Total Loss (USD)</h4>
-        <div class="value" id="totalLoss">-</div>
+        <div class="stat-label">Total Loss (USD)</div>
+        <div class="stat-value" id="totalLoss" style="color: var(--danger)">-</div>
     </div>
 </div>
 
@@ -454,8 +219,8 @@
             </div>
             
             <div class="form-actions">
-                <button type="button" class="btn-secondary" onclick="closeCreateModal()">Cancel</button>
-                <button type="submit" class="btn-primary">Create Investigation</button>
+                <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Investigation</button>
             </div>
         </form>
     </div>

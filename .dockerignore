@@ -1,3 +1,8 @@
+# =============================================================================
+# Bubble - Docker Build Ignore
+# =============================================================================
+
+# Python cache
 __pycache__
 *.py[cod]
 *$py.class
@@ -6,23 +11,43 @@ __pycache__
 *.egg-info/
 dist/
 build/
-*.log
-logs/
-.env
+.mypy_cache
+.pytest_cache
+.coverage
+htmlcov/
+
+# Virtual environments
 .venv
 venv/
 ENV/
 env/
+
+# Version control
 .git
 .gitignore
-.DS_Store
+
+# IDE
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
-.vscode/
-.idea/
-*.md
-README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (mounted as volume, don't bake in)
+logs/*.log
+logs/*_log
+
+# Docker compose (not needed in build)
 docker-compose*.yml
-Dockerfile*
 .dockerignore
+
+# Documentation (optional in container)
+docs/
+LICENSE
+
+# Notebooks (not needed in production image)
+notebooks/

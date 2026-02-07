@@ -1,84 +1,82 @@
 /* =================================================================
-   Footer Styles - Bubble Blockchain Analytics
+   Footer — Bubble Blockchain Analytics
 ================================================================= */
 
 footer {
-    background: var(--bg-darker);
-    border-top: 1px solid var(--border-dark);
-    padding: var(--spacing-xl) 0;
-    margin-top: auto;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-subtle);
+    padding: var(--space-xl);
+    margin-top: var(--space-2xl);
 }
 
 .footer-content {
+    max-width: var(--container-max);
+    margin: 0 auto;
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
-    flex-wrap: wrap;
-    gap: var(--spacing-md);
+    gap: var(--space-md);
+    text-align: center;
 }
 
 .footer-brand {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: var(--space-sm);
+    font-weight: 600;
+    color: var(--text-primary);
 }
+.footer-brand .logo-icon { font-size: 1.25rem; }
 
-.footer-logo {
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.footer-text {
-    color: var(--text-muted);
+footer p {
     font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    margin: 0;
 }
 
 .footer-links {
     display: flex;
-    gap: var(--spacing-lg);
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    justify-content: center;
 }
-
 .footer-links a {
-    color: var(--text-muted);
     font-size: var(--font-size-sm);
+    color: var(--text-secondary);
     transition: color var(--transition-fast);
 }
-
-.footer-links a:hover {
-    color: var(--primary);
-}
+.footer-links a:hover { color: var(--accent-primary); }
 
 .footer-divider {
     width: 100%;
+    max-width: 300px;
     height: 1px;
-    background: var(--border-dark);
-    margin: var(--spacing-lg) 0;
+    background: var(--border-subtle);
 }
 
 .footer-bottom {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    color: var(--text-muted);
-    font-size: var(--font-size-xs);
+    justify-content: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
 }
 
 .footer-tech {
     display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
-.footer-tech-badge {
-    padding: 0.125rem 0.5rem;
-    background: var(--bg-card);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
+.tech-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-full);
+    font-size: 0.7rem;
+    color: var(--text-muted);
 }

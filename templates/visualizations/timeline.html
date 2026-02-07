@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investigation Timeline — Bubble</title>
+    <!-- vis.js Network for graph visualization -->
+    <script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; }
+        
+        .header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: #12121a; border-bottom: 1px solid #2a2a3a; }
+        .header h1 { font-size: 18px; color: #fff; }
+        .header .stats { display: flex; gap: 20px; font-size: 13px; color: #888; }
+        .header .stat-value { color: #4fc3f7; font-weight: 600; }
+        
+        .controls { display: flex; gap: 10px; padding: 8px 20px; background: #16161f; border-bottom: 1px solid #2a2a3a; align-items: center; font-size: 13px; }
+        .controls label { color: #999; }
+        .controls select, .controls input { background: #1e1e2e; color: #fff; border: 1px solid #3a3a4a; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .controls button { background: #4f46e5; color: #fff; border: none; padding: 5px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .controls button:hover { background: #6366f1; }
+        
+        #graph-container { width: 100%; height: calc(100vh - 100px); }
+        
+        .legend { position: absolute; bottom: 20px; left: 20px; background: rgba(18,18,26,0.95); border: 1px solid #2a2a3a; border-radius: 8px; padding: 12px 16px; font-size: 12px; z-index: 10; }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 2px; }
+        
+        .info-panel { position: absolute; top: 110px; right: 20px; width: 300px; background: rgba(18,18,26,0.95); border: 1px solid #2a2a3a; border-radius: 8px; padding: 16px; font-size: 13px; display: none; z-index: 10; max-height: 60vh; overflow-y: auto; }
+        .info-panel h3 { font-size: 14px; color: #4fc3f7; margin-bottom: 8px; }
+        .info-panel .addr { font-family: monospace; font-size: 11px; color: #ccc; word-break: break-all; }
+        .info-panel .field { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #1a1a2a; }
+        .info-panel .field-label { color: #888; }
+        .info-panel .field-value { color: #e0e0e0; font-weight: 500; }
+        .info-panel .flagged { color: #ff5252; font-weight: 600; }
+        
+        .loading { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 16px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🫧 Investigation Timeline</h1>
+        <div class="stats">
+            <span>Nodes: <span class="stat-value" id="stat-nodes">–</span></span>
+            <span>Edges: <span class="stat-value" id="stat-edges">–</span></span>
+            <span>Max Depth: <span class="stat-value" id="stat-depth">–</span></span>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <label>Investigation:</label>
+        <input id="inv-id" type="number" value="1" min="1" style="width: 60px;">
+        <button onclick="loadData()">Load</button>
+        <span style="width:1px; background:#3a3a4a; height:20px;"></span>
+        <label>Layout:</label>
+        <select id="layout-mode" onchange="applyLayout()">
+            <option value="timeline">Timeline (X=time, Y=depth)</option>
+            <option value="hierarchical">Hierarchical (top-down)</option>
+            <option value="force">Force-directed</option>
+        </select>
+        <span style="width:1px; background:#3a3a4a; height:20px;"></span>
+        <button onclick="network.fit()">Fit View</button>
+        <button onclick="togglePhysics()">Toggle Physics</button>
+    </div>
+    
+    <div id="graph-container">
+        <div class="loading" id="loading">Enter an investigation ID and click Load</div>
+    </div>
+    
+    <!-- Legend -->
+    <div class="legend" id="legend"></div>
+    
+    <!-- Info Panel (shown on node click) -->
+    <div class="info-panel" id="info-panel">
+        <h3>Wallet Details</h3>
+        <div id="info-content"></div>
+    </div>
+    
+    <script>
+        let network = null;
+        let nodesDataset = null;
+        let edgesDataset = null;
+        let physicsEnabled = false;
+        
+        function loadData() {
+            const invId = document.getElementById('inv-id').value;
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('loading').textContent = 'Loading investigation data...';
+            
+            fetch(`/api/investigations/${invId}/timeline`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('loading').textContent = `Error: ${data.error}`;
+                        return;
+                    }
+                    renderGraph(data);
+                })
+                .catch(e => {
+                    document.getElementById('loading').textContent = `Failed: ${e.message}`;
+                });
+        }
+        
+        function renderGraph(data) {
+            document.getElementById('loading').style.display = 'none';
+            
+            // Update stats
+            document.getElementById('stat-nodes').textContent = data.stats.total_nodes;
+            document.getElementById('stat-edges').textContent = data.stats.total_edges;
+            document.getElementById('stat-depth').textContent = data.stats.max_jump_level;
+            
+            // Build legend
+            const legendEl = document.getElementById('legend');
+            legendEl.innerHTML = data.groups.map(g => 
+                `<div class="legend-item">
+                    <div class="legend-dot" style="background:${g.color}"></div>
+                    <span>${g.label}</span>
+                </div>`
+            ).join('');
+            
+            // Create vis.js datasets
+            nodesDataset = new vis.DataSet(data.nodes);
+            edgesDataset = new vis.DataSet(data.edges);
+            
+            const container = document.getElementById('graph-container');
+            const options = getLayoutOptions();
+            
+            network = new vis.Network(container, { nodes: nodesDataset, edges: edgesDataset }, options);
+            
+            // Click handler for node info
+            network.on('click', function(params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    const node = nodesDataset.get(nodeId);
+                    showNodeInfo(node);
+                } else {
+                    document.getElementById('info-panel').style.display = 'none';
+                }
+            });
+            
+            // Double-click to zoom
+            network.on('doubleClick', function(params) {
+                if (params.nodes.length > 0) {
+                    network.focus(params.nodes[0], { scale: 1.5, animation: true });
+                }
+            });
+        }
+        
+        function getLayoutOptions() {
+            const mode = document.getElementById('layout-mode').value;
+            
+            const base = {
+                nodes: {
+                    font: { size: 10, color: '#ccc' },
+                    borderWidth: 1,
+                    borderWidthSelected: 3,
+                },
+                edges: {
+                    font: { size: 9, color: '#888', strokeWidth: 0 },
+                    smooth: { type: 'continuous' },
+                    color: { color: 'rgba(100,100,100,0.3)', highlight: '#4fc3f7' },
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 100,
+                    navigationButtons: true,
+                    keyboard: true,
+                },
+                physics: { enabled: physicsEnabled },
+            };
+            
+            if (mode === 'timeline') {
+                // Fixed positions from server (x=time, y=depth)
+                base.physics = { enabled: false };
+            } else if (mode === 'hierarchical') {
+                base.layout = {
+                    hierarchical: {
+                        direction: 'UD',
+                        sortMethod: 'directed',
+                        levelSeparation: 120,
+                        nodeSpacing: 80,
+                    }
+                };
+            } else {
+                // Force-directed
+                base.physics = {
+                    enabled: true,
+                    forceAtlas2Based: {
+                        gravitationalConstant: -50,
+                        centralGravity: 0.01,
+                        springLength: 120,
+                    },
+                    maxVelocity: 50,
+                    stabilization: { iterations: 100 },
+                };
+            }
+            
+            return base;
+        }
+        
+        function applyLayout() {
+            if (!network) return;
+            const options = getLayoutOptions();
+            network.setOptions(options);
+            
+            // For timeline mode, restore fixed positions
+            if (document.getElementById('layout-mode').value === 'timeline') {
+                nodesDataset.forEach(node => {
+                    if (node.x !== undefined) {
+                        nodesDataset.update({ id: node.id, x: node.x, y: node.y, fixed: { x: true, y: true } });
+                    }
+                });
+            } else {
+                nodesDataset.forEach(node => {
+                    nodesDataset.update({ id: node.id, fixed: false });
+                });
+            }
+        }
+        
+        function togglePhysics() {
+            physicsEnabled = !physicsEnabled;
+            if (network) {
+                network.setOptions({ physics: { enabled: physicsEnabled } });
+            }
+        }
+        
+        function showNodeInfo(node) {
+            const meta = node.meta || {};
+            const panel = document.getElementById('info-panel');
+            const content = document.getElementById('info-content');
+            
+            content.innerHTML = `
+                <div class="addr">${meta.address || node.id}</div>
+                <br>
+                <div class="field"><span class="field-label">Role</span><span class="field-value">${meta.role || '?'}</span></div>
+                <div class="field"><span class="field-label">Depth</span><span class="field-value">${meta.depth ?? '?'}</span></div>
+                <div class="field"><span class="field-label">Jump Level</span><span class="field-value">${meta.jump_level ?? '?'}</span></div>
+                <div class="field"><span class="field-label">Total Received</span><span class="field-value">${(meta.total_received || 0).toFixed(4)}</span></div>
+                <div class="field"><span class="field-label">Total Sent</span><span class="field-value">${(meta.total_sent || 0).toFixed(4)}</span></div>
+                <div class="field"><span class="field-label">First Seen</span><span class="field-value">${meta.first_seen ? new Date(meta.first_seen).toLocaleString() : '?'}</span></div>
+                ${meta.is_flagged ? '<div class="flagged">⚠️ FLAGGED</div>' : ''}
+            `;
+            
+            panel.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

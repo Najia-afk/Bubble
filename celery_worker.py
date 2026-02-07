@@ -13,19 +13,29 @@ from utils.logging_config import setup_logging
 celery_logger = setup_logging('celery_worker.log')
 
 def initialize_dynamic_models():
-    """Initialize dynamic models for Celery worker."""
-    SessionFactory = get_session_factory()
-    session = SessionFactory()
-    try:
-        erc20models.generate_block_transfer_event_classes(session)
-        erc20models.generate_erc20_classes(session)
-        session.commit()
-        celery_logger.info("Dynamic models initialized successfully for Celery worker")
-    except Exception as e:
-        session.rollback()
-        celery_logger.error(f"Error during model initialization in Celery: {e}")
-    finally:
-        SessionFactory.remove()
+    """Initialize dynamic models for Celery worker.
+    Retries a few times since the web container may still be creating tables.
+    """
+    import time
+    max_retries = 5
+    for attempt in range(max_retries):
+        SessionFactory = get_session_factory()
+        session = SessionFactory()
+        try:
+            erc20models.generate_block_transfer_event_classes(session)
+            erc20models.generate_erc20_classes(session)
+            session.commit()
+            celery_logger.info("Dynamic models initialized successfully for Celery worker")
+            return
+        except Exception as e:
+            session.rollback()
+            if attempt < max_retries - 1:
+                celery_logger.warning(f"Model init attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in 5s...")
+                time.sleep(5)
+            else:
+                celery_logger.warning(f"Dynamic model init skipped after {max_retries} attempts: {e}")
+        finally:
+            SessionFactory.remove()
 
 def make_celery(app_name=__name__):
     app_config = get_config()

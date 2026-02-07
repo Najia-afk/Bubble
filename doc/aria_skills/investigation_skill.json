@@ -1,0 +1,161 @@
+{
+  "skill_id": "aml_investigation",
+  "version": "1.0.0",
+  "name": "AML Investigation Skill",
+  "description": "Automated 6-step Anti-Money Laundering investigation pipeline. Traces stolen funds across EVM chains, discovers connected wallets, classifies entities via ML, and produces risk-scored reports.",
+  "category": "investigation",
+  "trigger": {
+    "type": "api",
+    "endpoint": "POST /api/cases/{case_id}/run-skill",
+    "polling_endpoint": "GET /api/cases/{case_id}/skill-status",
+    "poll_interval_ms": 3000
+  },
+  "inputs": {
+    "case_id": {
+      "type": "string",
+      "required": true,
+      "description": "Case identifier (e.g. CASE-2026-001)"
+    },
+    "max_depth": {
+      "type": "integer",
+      "required": false,
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "description": "Maximum hop depth for fund tracing expansion"
+    },
+    "max_wallets": {
+      "type": "integer",
+      "required": false,
+      "default": 100,
+      "min": 10,
+      "max": 500,
+      "description": "Maximum total wallets to include in investigation"
+    }
+  },
+  "steps": [
+    {
+      "id": "import",
+      "order": 1,
+      "label": "Import Case",
+      "icon": "📥",
+      "description": "Create Investigation entity from case seed wallets. Maps CaseWallet → InvestigationWallet with role normalization and chain_id resolution.",
+      "dependencies": [],
+      "failure_mode": "continue",
+      "output": {
+        "investigation_id": "integer",
+        "seed_wallet_count": "integer",
+        "chains": "string[]"
+      }
+    },
+    {
+      "id": "trace",
+      "order": 2,
+      "label": "Trace Transfers",
+      "icon": "🔗",
+      "description": "Fetch ERC20 transfer history for all seed wallets via Etherscan v2 API. Stores transfers in chain-specific dynamic tables.",
+      "dependencies": ["import"],
+      "failure_mode": "continue",
+      "output": {
+        "transfers_fetched": "integer",
+        "wallets_synced": "integer"
+      }
+    },
+    {
+      "id": "expand",
+      "order": 3,
+      "label": "Follow the Money",
+      "icon": "🕵️",
+      "description": "Iteratively discover connected wallets by analyzing counterparties. Runs up to max_depth iterations. Each iteration: expand_investigation() → sync_investigation_transfers() for new wallets. Stops when 0 new wallets found or max_wallets reached.",
+      "dependencies": ["trace"],
+      "failure_mode": "continue",
+      "output": {
+        "wallets_discovered": "integer",
+        "depth_reached": "integer",
+        "expansion_rounds": "integer"
+      }
+    },
+    {
+      "id": "classify",
+      "order": 4,
+      "label": "ML Classification",
+      "icon": "🤖",
+      "description": "Run production ML model + heuristic rules + known-entity matching on all wallets. Sources: ml_model (Random Forest), heuristic (rule-based), known (exchange/mixer/bridge databases).",
+      "dependencies": ["expand"],
+      "failure_mode": "continue",
+      "output": {
+        "wallets_classified": "integer",
+        "classification_breakdown": "object",
+        "ml_source_breakdown": "object"
+      }
+    },
+    {
+      "id": "assess",
+      "order": 5,
+      "label": "Risk Assessment",
+      "icon": "⚠️",
+      "description": "Compute composite risk score (0-100). Factors: mixer interaction (+30), bridge crossing (+20), exchange endpoint (+10), anomaly detection (+15). Risk labels: CRITICAL ≥70, HIGH ≥50, MEDIUM ≥25, LOW <25.",
+      "dependencies": ["classify"],
+      "failure_mode": "continue",
+      "output": {
+        "risk_score": "integer",
+        "risk_label": "string",
+        "exchange_count": "integer",
+        "mixer_count": "integer",
+        "bridge_count": "integer",
+        "flagged_wallets": "integer"
+      }
+    },
+    {
+      "id": "report",
+      "order": 6,
+      "label": "Generate Report",
+      "icon": "📊",
+      "description": "Compile final investigation report via generate_investigation_report(). Aggregates all findings, classification results, risk assessment into structured report.",
+      "dependencies": ["assess"],
+      "failure_mode": "continue",
+      "output": {
+        "report_generated": "boolean",
+        "investigation_id": "integer"
+      }
+    }
+  ],
+  "state_management": {
+    "backend": "redis",
+    "key_pattern": "skill:investigation:{case_id}",
+    "ttl_seconds": 86400,
+    "structure": {
+      "status": "queued|running|completed|failed",
+      "case_id": "string",
+      "investigation_id": "integer|null",
+      "started_at": "ISO8601",
+      "completed_at": "ISO8601|null",
+      "current_step": "string",
+      "steps": {
+        "<step_id>": {
+          "status": "pending|running|completed|failed",
+          "started_at": "ISO8601|null",
+          "completed_at": "ISO8601|null",
+          "elapsed_seconds": "float|null",
+          "result": "object|null",
+          "error": "string|null"
+        }
+      },
+      "findings": "object|null"
+    }
+  },
+  "celery_task": {
+    "name": "run_investigation_skill",
+    "queue": "default",
+    "soft_time_limit": 1800,
+    "time_limit": 2000,
+    "module": "api.tasks.investigation_tasks"
+  },
+  "frontend": {
+    "panel": "Slide-out skill panel on Cases page",
+    "controls": ["max_depth (slider 1-10)", "max_wallets (slider 10-500)"],
+    "step_visualization": "Vertical timeline with status indicators",
+    "findings_display": "Grid with risk meter and classification breakdown",
+    "post_completion": "Link to graph visualization (/graph?investigation_id=N)"
+  }
+}

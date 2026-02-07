@@ -31,7 +31,7 @@ class DatabaseInitializer:
             port = os.getenv('POSTGRES_PORT', '5432')
             db = os.getenv('POSTGRES_DB', 'bubble_db')
             user = os.getenv('POSTGRES_USER', 'bubble_user')
-            password = os.getenv('POSTGRES_PASSWORD', 'bubble_password_change_me')
+            password = os.getenv('POSTGRES_PASSWORD', 'bubble_password')
             self.db_url = f'postgresql://{user}:{password}@{host}:{port}/{db}'
         
         self.engine = create_engine(self.db_url)

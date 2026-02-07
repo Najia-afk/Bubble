@@ -4,279 +4,90 @@
 
 {% block extra_css %}
 <style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-    
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 1rem;
-        margin-bottom: 2rem;
-    }
-    
-    .stat-card {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 1.25rem;
-        text-align: center;
-    }
-    
-    .stat-card h4 {
-        color: var(--text-secondary);
-        font-size: 0.75rem;
-        font-weight: 500;
-        margin-bottom: 0.5rem;
-        text-transform: uppercase;
-    }
-    
-    .stat-card .value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-    
-    .stat-card .value.danger { color: var(--danger); }
-    .stat-card .value.warning { color: var(--warning); }
-    .stat-card .value.success { color: var(--success); }
-    
-    .panel {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        margin-bottom: 1.5rem;
-        overflow: hidden;
-    }
-    
-    .panel-header {
-        padding: 1rem 1.25rem;
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .panel-title {
-        font-size: 1rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .panel-body {
-        padding: 1.25rem;
-    }
-    
-    .alert-list {
-        max-height: 400px;
-        overflow-y: auto;
-    }
-    
-    .alert-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 1rem;
-        padding: 1rem;
-        border-bottom: 1px solid var(--border);
-        transition: background 0.2s;
-    }
-    
-    .alert-item:hover {
-        background: var(--bg-hover);
-    }
-    
-    .alert-item:last-child {
-        border-bottom: none;
-    }
-    
-    .alert-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.25rem;
-        flex-shrink: 0;
-    }
-    
+    /* Monitor-specific: alert items */
+    .alert-list { max-height: 400px; overflow-y: auto; }
+    .alert-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--border-color); transition: background 0.2s; }
+    .alert-item:hover { background: var(--bg-hover); }
+    .alert-item:last-child { border-bottom: none; }
+    .alert-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; }
     .alert-icon.incoming { background: rgba(34, 197, 94, 0.1); }
     .alert-icon.outgoing { background: rgba(59, 130, 246, 0.1); }
     .alert-icon.mixer { background: rgba(239, 68, 68, 0.1); }
     .alert-icon.bridge { background: rgba(139, 92, 246, 0.1); }
     .alert-icon.large_transfer { background: rgba(245, 158, 11, 0.1); }
-    
-    .alert-content {
-        flex: 1;
-        min-width: 0;
-    }
-    
-    .alert-title {
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-    }
-    
-    .alert-details {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-    }
-    
-    .alert-meta {
-        display: flex;
-        gap: 1rem;
-        margin-top: 0.5rem;
-        font-size: 0.75rem;
-        color: var(--text-muted);
-    }
-    
-    .alert-time {
-        text-align: right;
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        white-space: nowrap;
-    }
-    
-    .risk-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.125rem 0.5rem;
-        border-radius: 9999px;
-        font-size: 0.675rem;
-        font-weight: 600;
-    }
-    
+    .alert-content { flex: 1; min-width: 0; }
+    .alert-title { font-weight: 600; margin-bottom: 0.25rem; }
+    .alert-details { font-size: 0.875rem; color: var(--text-secondary); }
+    .alert-meta { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted); }
+    .alert-time { text-align: right; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+
+    /* Risk badges */
+    .risk-badge { display: inline-flex; align-items: center; padding: 0.125rem 0.5rem; border-radius: 9999px; font-size: 0.675rem; font-weight: 600; }
     .risk-badge.high { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
     .risk-badge.medium { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
     .risk-badge.low { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
-    
-    .wallet-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 1rem;
+
+    /* Wallet cards */
+    .wallet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .wallet-card { background: var(--bg-tertiary); border-radius: 8px; padding: 1rem; position: relative; }
+    .wallet-address { font-family: var(--font-mono); font-size: 0.875rem; color: var(--accent-primary); margin-bottom: 0.5rem; }
+    .wallet-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); }
+
+    .remove-wallet-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; padding: 0.25rem; border-radius: 4px; opacity: 0.5; transition: all 0.2s; }
+    .remove-wallet-btn:hover { opacity: 1; background: var(--danger); color: white; }
+
+    /* Chain badges */
+    .chain-badge { display: inline-flex; align-items: center; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.675rem; font-weight: 600; background: var(--bg-tertiary); }
+    .chain-badge.ETH { background: #627eea; color: white; }
+    .chain-badge.POL { background: #8247e5; color: white; }
+    .chain-badge.BSC { background: #f3ba2f; color: var(--bg-primary); }
+    .chain-badge.BASE { background: #0052ff; color: white; }
+    .chain-badge.ARB { background: #28a0f0; color: white; }
+    .chain-badge.OP { background: #ff0420; color: white; }
+
+    /* Live indicator */
+    .live-indicator { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--success); }
+    .live-indicator::before { content: ''; width: 8px; height: 8px; background: var(--success); border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    /* Stat card value styling */
+    .stat-card .value { font-size: 2rem; font-weight: 700; color: var(--text-primary); }
+    .stat-card .value.danger { color: var(--danger); }
+    .stat-card .value.warning { color: var(--warning); }
+    .stat-card .value.success { color: var(--success); }
+    .stat-card h4 { color: var(--text-secondary); font-size: 0.75rem; font-weight: 500; margin-bottom: 0.5rem; text-transform: uppercase; }
+
+    /* Suspect table */
+    .suspect-header {
+        display: grid; grid-template-columns: 2fr 1.5fr 0.8fr 1.2fr 1.2fr 1fr 0.8fr;
+        gap: 1rem; padding: 0.75rem 1rem; background: rgba(0, 0, 0, 0.25);
+        border-radius: 8px 8px 0 0; font-weight: 600; font-size: 0.75rem;
+        color: var(--text-secondary); text-transform: uppercase;
     }
-    
-    .wallet-card {
-        background: var(--bg-secondary);
-        border-radius: 8px;
-        padding: 1rem;
-        position: relative;
+    .suspect-row {
+        display: grid; grid-template-columns: 2fr 1.5fr 0.8fr 1.2fr 1.2fr 1fr 0.8fr;
+        gap: 1rem; padding: 0.875rem 1rem; border-bottom: 1px solid var(--border-color);
+        align-items: center; font-size: 0.875rem;
     }
-    
-    .wallet-address {
-        font-family: var(--font-mono);
-        font-size: 0.875rem;
-        color: var(--primary);
-        margin-bottom: 0.5rem;
-    }
-    
-    .remove-wallet-btn {
-        background: transparent;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        font-size: 1rem;
-        padding: 0.25rem;
-        border-radius: 4px;
-        opacity: 0.5;
-        transition: all 0.2s;
-    }
-    
-    .remove-wallet-btn:hover {
-        opacity: 1;
-        background: var(--error);
-        color: white;
-    }
-    
-    .wallet-meta {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-    }
-    
-    .chain-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.125rem 0.5rem;
-        border-radius: 4px;
-        font-size: 0.675rem;
-        font-weight: 600;
-        background: var(--bg-tertiary);
-    }
-    
-    .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        font-size: 0.875rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-        border: none;
-    }
-    
-    .btn-primary {
-        background: var(--primary);
-        color: white;
-    }
-    
-    .btn-secondary {
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        border: 1px solid var(--border);
-    }
-    
-    .btn-sm {
-        padding: 0.375rem 0.75rem;
-        font-size: 0.75rem;
-    }
-    
-    .empty-state {
-        text-align: center;
-        padding: 3rem;
-        color: var(--text-secondary);
-    }
-    
-    .live-indicator {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.75rem;
-        color: var(--success);
-    }
-    
-    .live-indicator::before {
-        content: '';
-        width: 8px;
-        height: 8px;
-        background: var(--success);
-        border-radius: 50%;
-        animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-    
-    .grid-2 {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
-    }
-    
-    @media (max-width: 1024px) {
-        .grid-2 {
-            grid-template-columns: 1fr;
-        }
-    }
+    .suspect-row:hover { background: var(--bg-hover); }
+    .suspect-row:last-child { border-bottom: none; }
+    .suspect-address { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .suspect-address code { font-family: var(--font-mono); font-size: 0.8rem; }
+    .suspect-label { font-size: 0.7rem; color: var(--text-muted); background: var(--bg-tertiary); padding: 0.15rem 0.4rem; border-radius: 4px; }
+    .suspect-inv a { color: var(--accent-cyan); text-decoration: none; font-size: 0.8rem; }
+    .suspect-inv a:hover { text-decoration: underline; }
+    .suspect-time { font-size: 0.8rem; color: var(--text-secondary); }
+    .suspect-time .no-activity { color: var(--text-muted); font-style: italic; }
+    .suspect-dest code { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); }
+    .suspect-stats { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; color: var(--text-muted); }
+    .suspect-actions { display: flex; gap: 0.5rem; }
+    .action-link { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.7; transition: opacity 0.2s; padding: 0.25rem; }
+    .action-link:hover { opacity: 1; }
+
+    /* Role badges */
+    .role-badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+    .role-badge.suspect, .role-badge.attacker, .role-badge.hacker { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .role-badge.thief, .role-badge.scammer { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
 </style>
 {% endblock %}
 
@@ -304,24 +115,24 @@
 <!-- Stats -->
 <div class="stats-grid">
     <div class="stat-card">
-        <h4>Monitored Wallets</h4>
-        <div class="value" id="statWallets">-</div>
+        <div class="stat-label">Monitored Wallets</div>
+        <div class="stat-value" id="statWallets" style="color: var(--accent-primary)">-</div>
     </div>
     <div class="stat-card">
-        <h4>Total Alerts (24h)</h4>
-        <div class="value" id="statAlerts">-</div>
+        <div class="stat-label">Total Alerts (24h)</div>
+        <div class="stat-value" id="statAlerts" style="color: var(--warning)">-</div>
     </div>
     <div class="stat-card">
-        <h4>High Risk Alerts</h4>
-        <div class="value danger" id="statHighRisk">-</div>
+        <div class="stat-label">High Risk Alerts</div>
+        <div class="stat-value" id="statHighRisk" style="color: var(--danger)">-</div>
     </div>
     <div class="stat-card">
-        <h4>Mixer Detections</h4>
-        <div class="value warning" id="statMixer">-</div>
+        <div class="stat-label">Mixer Detections</div>
+        <div class="stat-value" id="statMixer" style="color: var(--warning)">-</div>
     </div>
     <div class="stat-card">
-        <h4>Bridge Activity</h4>
-        <div class="value" id="statBridge">-</div>
+        <div class="stat-label">Bridge Activity</div>
+        <div class="stat-value" id="statBridge" style="color: var(--accent-purple)">-</div>
     </div>
 </div>
 
@@ -330,7 +141,7 @@
     <div class="panel">
         <div class="panel-header">
             <h3 class="panel-title">🚨 Recent Alerts</h3>
-            <select id="alertFilter" onchange="loadAlerts()" class="btn-secondary btn-sm">
+            <select id="alertFilter" onchange="loadAlerts()" style="width: auto; padding: 0.375rem 2rem 0.375rem 0.75rem; font-size: 0.75rem;">
                 <option value="">All Types</option>
                 <option value="mixer">Mixer</option>
                 <option value="bridge">Bridge</option>
@@ -745,241 +556,4 @@
         if (refreshInterval) clearInterval(refreshInterval);
     });
 </script>
-
-<style>
-    /* Suspect Table Styles */
-    .suspect-header {
-        display: grid;
-        grid-template-columns: 2fr 1.5fr 0.8fr 1.2fr 1.2fr 1fr 0.8fr;
-        gap: 1rem;
-        padding: 0.75rem 1rem;
-        background: #0f0f1a;
-        border-radius: 8px 8px 0 0;
-        font-weight: 600;
-        font-size: 0.75rem;
-        color: #a1a1aa;
-        text-transform: uppercase;
-    }
-    
-    .suspect-row {
-        display: grid;
-        grid-template-columns: 2fr 1.5fr 0.8fr 1.2fr 1.2fr 1fr 0.8fr;
-        gap: 1rem;
-        padding: 0.875rem 1rem;
-        border-bottom: 1px solid #27272a;
-        align-items: center;
-        font-size: 0.875rem;
-    }
-    
-    .suspect-row:hover {
-        background: #1a1a2e;
-    }
-    
-    .suspect-row:last-child {
-        border-bottom: none;
-    }
-    
-    .suspect-address {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    
-    .suspect-address code {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.8rem;
-    }
-    
-    .suspect-label {
-        font-size: 0.7rem;
-        color: #71717a;
-        background: #27272a;
-        padding: 0.15rem 0.4rem;
-        border-radius: 4px;
-    }
-    
-    .suspect-inv a {
-        color: #00d4ff;
-        text-decoration: none;
-        font-size: 0.8rem;
-    }
-    
-    .suspect-inv a:hover {
-        text-decoration: underline;
-    }
-    
-    .role-badge {
-        display: inline-block;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-    
-    .role-badge.suspect, .role-badge.attacker, .role-badge.hacker {
-        background: rgba(239, 68, 68, 0.2);
-        color: #ef4444;
-    }
-    
-    .role-badge.thief, .role-badge.scammer {
-        background: rgba(245, 158, 11, 0.2);
-        color: #f59e0b;
-    }
-    
-    .suspect-time {
-        font-size: 0.8rem;
-        color: #b4b4c0;
-    }
-    
-    .suspect-time .no-activity {
-        color: #71717a;
-        font-style: italic;
-    }
-    
-    .suspect-dest code {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.75rem;
-        color: #a1a1aa;
-    }
-    
-    .suspect-stats {
-        display: flex;
-        flex-direction: column;
-        gap: 0.2rem;
-        font-size: 0.75rem;
-        color: #8888a0;
-    }
-    
-    .suspect-actions {
-        display: flex;
-        gap: 0.5rem;
-    }
-    
-    .action-link {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 1rem;
-        opacity: 0.7;
-        transition: opacity 0.2s;
-        padding: 0.25rem;
-    }
-    
-    .action-link:hover {
-        opacity: 1;
-    }
-    
-    .chain-badge {
-        font-size: 0.65rem;
-        padding: 0.15rem 0.4rem;
-        border-radius: 4px;
-        font-weight: 600;
-    }
-    
-    .chain-badge.ETH { background: #627eea; color: white; }
-    .chain-badge.POL { background: #8247e5; color: white; }
-    .chain-badge.BSC { background: #f3ba2f; color: #1a1a2e; }
-    .chain-badge.BASE { background: #0052ff; color: white; }
-    .chain-badge.ARB { background: #28a0f0; color: white; }
-    .chain-badge.OP { background: #ff0420; color: white; }
-
-    .modal-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.85);
-        z-index: 1000;
-        justify-content: center;
-        align-items: center;
-        backdrop-filter: blur(4px);
-    }
-    
-    .modal-overlay.active {
-        display: flex;
-    }
-    
-    .modal {
-        background: #1a1a2e;
-        border: 1px solid #3f3f46;
-        border-radius: 12px;
-        padding: 1.5rem;
-        width: 90%;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-    }
-    
-    .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-        border-bottom: 1px solid #3f3f46;
-        padding-bottom: 1rem;
-    }
-    
-    .modal-title {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: #ffffff;
-    }
-    
-    .modal-close {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: #a1a1aa;
-        transition: color 0.2s;
-    }
-    
-    .modal-close:hover {
-        color: #ffffff;
-    }
-    
-    .form-group {
-        margin-bottom: 1rem;
-    }
-    
-    .form-group label {
-        display: block;
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-        color: #ffffff;
-    }
-    
-    .form-group input,
-    .form-group select {
-        width: 100%;
-        padding: 0.75rem;
-        border: 1px solid #3f3f46;
-        border-radius: 6px;
-        background: #0f0f1a;
-        color: #ffffff;
-        font-size: 1rem;
-    }
-    
-    .form-group input::placeholder {
-        color: #71717a;
-    }
-    
-    .form-group input:focus,
-    .form-group select:focus {
-        outline: none;
-        border-color: #00d4ff;
-        box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
-    }
-    
-    .form-actions {
-        display: flex;
-        gap: 1rem;
-        justify-content: flex-end;
-        margin-top: 1.5rem;
-        padding-top: 1rem;
-        border-top: 1px solid #3f3f46;
-    }
-</style>
 {% endblock %}

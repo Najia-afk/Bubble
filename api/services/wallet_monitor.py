@@ -83,9 +83,9 @@ class WalletMonitorService:
         return self.data.get_monitored_wallets(chain_code=chain, case_id=case_id)
     
     def get_alerts(self, chain: str = None, alert_type: str = None, 
-                   limit: int = 100) -> List[Alert]:
+                   since=None, limit: int = 100) -> List[Alert]:
         """Get recent alerts."""
-        return self.data.get_alerts(chain_code=chain, alert_type=alert_type, limit=limit)
+        return self.data.get_alerts(chain_code=chain, alert_type=alert_type, since=since, limit=limit)
     
     def get_stats(self) -> Dict:
         """Get monitoring statistics."""

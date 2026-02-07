@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
 from scipy import stats
-from sqlalchemy import text
+from sqlalchemy import func, inspect as sa_inspect
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +134,7 @@ class WalletFeatureEngineer:
         
         # Convert to DataFrame for analysis
         df = pd.DataFrame(transactions)
+        df = df.copy()  # Avoid SettingWithCopyWarning
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df['value'] = df['value'].astype(float) / 1e18  # Normalize from wei
         
@@ -149,17 +150,12 @@ class WalletFeatureEngineer:
         return features
     
     def _discover_tables(self, chain: str) -> List[str]:
-        """Discover available transfer tables for a chain."""
+        """Discover available transfer tables for a chain using SQLAlchemy inspector."""
         try:
-            query = text("""
-                SELECT table_name FROM information_schema.tables 
-                WHERE table_name LIKE :pattern
-            """)
-            result = self.session.execute(
-                query, 
-                {'pattern': f'%_{chain.lower()}_erc20_transfer_event'}
-            ).fetchall()
-            return [r[0] for r in result]
+            inspector = sa_inspect(self.session.get_bind())
+            all_tables = inspector.get_table_names()
+            suffix = f'_{chain.lower()}_erc20_transfer_event'
+            return [t for t in all_tables if t.endswith(suffix)]
         except Exception as e:
             logger.error(f"Table discovery failed: {e}")
             return []
@@ -170,60 +166,66 @@ class WalletFeatureEngineer:
         tables: List[str], 
         lookback_days: int
     ) -> List[Dict]:
-        """Fetch transactions from multiple tables."""
+        """Fetch transactions from multiple tables using dynamic ORM classes."""
+        from api.application.erc20models import get_transfer_event_class, Token
+        
         transactions = []
         cutoff = datetime.utcnow() - timedelta(days=lookback_days)
         
-        for table in tables:
+        for table_name in tables:
             try:
-                # Outgoing
-                out_query = text(f"""
-                    SELECT 'out' as direction, 
-                           to_contract_address as counterparty,
-                           value, timestamp, hash
-                    FROM {table}
-                    WHERE LOWER(from_contract_address) = :addr
-                    AND timestamp >= :cutoff
-                """)
-                out_result = self.session.execute(
-                    out_query, 
-                    {'addr': address, 'cutoff': cutoff}
-                ).fetchall()
+                # Parse symbol and trigram from table name: {symbol}_{trigram}_erc20_transfer_event
+                parts = table_name.replace('_erc20_transfer_event', '').rsplit('_', 1)
+                if len(parts) != 2:
+                    continue
+                symbol, trigram = parts[0], parts[1]
                 
-                for row in out_result:
+                cls = get_transfer_event_class(symbol, trigram)
+                if cls is None:
+                    continue
+                
+                # Outgoing — pure ORM
+                out_rows = self.session.query(
+                    cls.to_contract_address,
+                    cls.value,
+                    cls.timestamp,
+                    cls.hash,
+                ).filter(
+                    func.lower(cls.from_contract_address) == address,
+                    cls.timestamp >= cutoff
+                ).all()
+                
+                for row in out_rows:
                     transactions.append({
                         'direction': 'out',
-                        'counterparty': row[1],
-                        'value': row[2],
-                        'timestamp': row[3],
-                        'hash': row[4]
+                        'counterparty': row[0],
+                        'value': row[1],
+                        'timestamp': row[2],
+                        'hash': row[3]
                     })
                 
-                # Incoming
-                in_query = text(f"""
-                    SELECT 'in' as direction,
-                           from_contract_address as counterparty,
-                           value, timestamp, hash
-                    FROM {table}
-                    WHERE LOWER(to_contract_address) = :addr
-                    AND timestamp >= :cutoff
-                """)
-                in_result = self.session.execute(
-                    in_query,
-                    {'addr': address, 'cutoff': cutoff}
-                ).fetchall()
+                # Incoming — pure ORM
+                in_rows = self.session.query(
+                    cls.from_contract_address,
+                    cls.value,
+                    cls.timestamp,
+                    cls.hash,
+                ).filter(
+                    func.lower(cls.to_contract_address) == address,
+                    cls.timestamp >= cutoff
+                ).all()
                 
-                for row in in_result:
+                for row in in_rows:
                     transactions.append({
                         'direction': 'in',
-                        'counterparty': row[1],
-                        'value': row[2],
-                        'timestamp': row[3],
-                        'hash': row[4]
+                        'counterparty': row[0],
+                        'value': row[1],
+                        'timestamp': row[2],
+                        'hash': row[3]
                     })
                     
             except Exception as e:
-                logger.debug(f"Error fetching from {table}: {e}")
+                logger.debug(f"Error fetching from {table_name}: {e}")
                 continue
         
         return transactions
@@ -320,12 +322,11 @@ class WalletFeatureEngineer:
             features['avg_time_between_tx'] = 0
         
         # Weekend activity
-        df['is_weekend'] = df['timestamp'].dt.dayofweek >= 5
-        features['weekend_tx_ratio'] = df['is_weekend'].sum() / len(df)
+        features['weekend_tx_ratio'] = (df['timestamp'].dt.dayofweek >= 5).sum() / len(df)
         
         # Night activity (00:00 - 06:00 UTC)
-        df['hour'] = df['timestamp'].dt.hour
-        features['night_tx_ratio'] = len(df[(df['hour'] >= 0) & (df['hour'] < 6)]) / len(df)
+        hours = df['timestamp'].dt.hour
+        features['night_tx_ratio'] = len(df[(hours >= 0) & (hours < 6)]) / len(df)
         
         # Burst activity (many tx in short time)
         if len(df) > 5:
@@ -337,7 +338,7 @@ class WalletFeatureEngineer:
             features['burst_activity_score'] = 0
         
         # Regularity score (entropy of hour distribution)
-        hour_counts = df['hour'].value_counts(normalize=True)
+        hour_counts = hours.value_counts(normalize=True)
         features['regularity_score'] = stats.entropy(hour_counts) if len(hour_counts) > 1 else 0
         
         return features
@@ -464,7 +465,7 @@ class WalletFeatureEngineer:
         
         # Velocity change rate
         if len(df) > 10:
-            df_sorted = df.sort_values('timestamp')
+            df_sorted = df.sort_values('timestamp').copy()
             df_sorted['period'] = pd.cut(range(len(df_sorted)), bins=5, labels=False)
             period_counts = df_sorted.groupby('period').size()
             features['velocity_change_rate'] = period_counts.std() / max(period_counts.mean(), 1)

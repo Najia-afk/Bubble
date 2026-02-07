@@ -23,7 +23,7 @@ def test_environment_variables():
         'POSTGRES_DB',
         'POSTGRES_USER',
         'POSTGRES_PASSWORD',
-        'REDIS_HOST'
+        'REDIS_URL'
     ]
     
     # In testing, not all vars may be set - just check they're defined in .env.example

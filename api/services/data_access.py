@@ -228,7 +228,7 @@ class DataAccess:
     # =========================================================================
     
     def get_alerts(self, wallet_id: int = None, chain_code: str = None,
-                   alert_type: str = None, limit: int = 100) -> List[Alert]:
+                   alert_type: str = None, since=None, limit: int = 100) -> List[Alert]:
         """Get alerts with optional filters."""
         q = self.session.query(Alert)
         if wallet_id:
@@ -237,6 +237,8 @@ class DataAccess:
             q = q.filter(Alert.chain_code == chain_code)
         if alert_type:
             q = q.filter(Alert.alert_type == alert_type)
+        if since:
+            q = q.filter(Alert.timestamp >= since)
         return q.order_by(Alert.timestamp.desc()).limit(limit).all()
     
     def create_alert(self, wallet_id: int, chain_code: str, alert_type: str,

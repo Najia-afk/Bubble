@@ -24,7 +24,7 @@ def train_wallet_classifier(model_type: str = 'xgboost', run_name: str = None,
         test_size: Fraction for test split
         use_smote: Whether to use SMOTE for class balancing
     """
-    from api.application import get_session_factory
+    from utils.database import get_session_factory
     from api.services.ml_trainer import get_ml_trainer
     from api.application.erc20models import ModelMetadata, AuditLog, Base
     import json
@@ -55,15 +55,21 @@ def train_wallet_classifier(model_type: str = 'xgboost', run_name: str = None,
         
         # Save model metadata to database
         if result.get('status') == 'success':
+            metrics = result.get('metrics', {})
+            run_id = metrics.get('run_id', 'unknown')
+            n_samples = len(result.get('class_distribution', {}))
+            
             metadata = ModelMetadata(
                 model_name='wallet_classifier',
-                version=result.get('run_id', 'unknown')[:10],
+                version=run_id[:10] if run_id else 'unknown',
                 model_type=model_type,
-                mlflow_run_id=result.get('run_id'),
-                accuracy=result.get('accuracy'),
-                f1_score=result.get('f1'),
-                n_samples=result.get('n_samples'),
-                shap_importance=json.dumps(result.get('shap_importance', {})),
+                mlflow_run_id=run_id,
+                accuracy=metrics.get('accuracy'),
+                f1_score=metrics.get('f1_weighted'),
+                n_samples=n_samples,
+                n_features=len(result.get('feature_names', [])),
+                feature_names=json.dumps(result.get('feature_names', [])),
+                shap_importance=None,  # Stored in MLflow artifacts
                 is_production=False,
                 is_validated=False
             )
@@ -74,10 +80,10 @@ def train_wallet_classifier(model_type: str = 'xgboost', run_name: str = None,
                 timestamp=datetime.utcnow(),
                 action_type='model',
                 user_id='system',
-                notes=f'Trained {model_type} model with {result.get("n_samples")} samples',
-                model_version=result.get('run_id', 'unknown')[:10],
-                mlflow_run_id=result.get('run_id'),
-                confidence=result.get('accuracy')
+                notes=f'Trained {model_type} model: accuracy={metrics.get("accuracy", 0):.3f}, f1={metrics.get("f1_weighted", 0):.3f}',
+                model_version=run_id[:10] if run_id else 'unknown',
+                mlflow_run_id=run_id,
+                confidence=metrics.get('accuracy')
             )
             session.add(audit)
             session.commit()
@@ -99,7 +105,7 @@ def check_model_drift():
     Check for data drift between training and recent predictions.
     Compares feature distributions.
     """
-    from api.application import get_session_factory
+    from utils.database import get_session_factory
     from api.application.erc20models import WalletScore, ModelMetadata, AuditLog
     from api.services.ml_trainer import get_ml_trainer
     import pandas as pd
@@ -143,19 +149,20 @@ def check_model_drift():
         # Update production model with drift status
         prod_model = session.query(ModelMetadata).filter_by(is_production=True).first()
         if prod_model:
-            prod_model.drift_detected = drift_result.get('drift_detected', False)
-            prod_model.drift_score = drift_result.get('drift_score', 0.0)
+            prod_model.drift_detected = drift_result.get('dataset_drift', False)
+            prod_model.drift_score = drift_result.get('drift_share', 0.0)
             prod_model.last_drift_check = datetime.utcnow()
             
             # Log to audit if drift detected
-            if drift_result.get('drift_detected'):
+            if drift_result.get('dataset_drift'):
                 audit = AuditLog(
                     timestamp=datetime.utcnow(),
                     action_type='alert',
                     user_id='system',
-                    notes=f'Data drift detected! Score: {drift_result.get("drift_score")}',
+                    notes=f'Data drift detected! Share: {drift_result.get("drift_share", 0):.3f}, '
+                           f'Drifted features: {[f["feature"] for f in drift_result.get("drifted_features", [])]}',
                     model_version=prod_model.version,
-                    confidence=drift_result.get('drift_score')
+                    confidence=drift_result.get('drift_share')
                 )
                 session.add(audit)
             
@@ -187,7 +194,7 @@ def classify_wallet_with_shap(address: str, chain_trigram: str = 'ETH',
     Returns:
         Classification with SHAP explanation
     """
-    from api.application import get_session_factory
+    from utils.database import get_session_factory
     from api.application.erc20models import AuditLog, TRIGRAM_TO_CHAIN_ID
     from api.services.wallet_classifier import get_wallet_classifier
     from api.services.ml_trainer import get_ml_trainer
@@ -314,7 +321,7 @@ def promote_model_to_production(model_name: str, version: str, stage: str = 'Pro
         version: Version to promote (string)
         stage: Target stage (Staging or Production)
     """
-    from api.application import get_session_factory
+    from utils.database import get_session_factory
     from api.application.erc20models import ModelMetadata, AuditLog
     from api.services.ml_trainer import get_ml_trainer
     

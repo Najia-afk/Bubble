@@ -7,7 +7,7 @@ Suggests labels based on transaction patterns and behavior.
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from sqlalchemy import text, func
+from sqlalchemy import func, inspect as sa_inspect
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans, DBSCAN
 import pickle
@@ -134,67 +134,90 @@ class WalletClassifier:
                 session.close()
     
     def _extract_features_from_tables(self, address: str, chain_trigram: str, session) -> Optional[Dict]:
-        """Extract features by querying transfer event tables"""
+        """Extract features by querying transfer event tables using dynamic ORM classes."""
+        from api.application.erc20models import Token, get_transfer_event_class
+        
         address_lower = address.lower()
         
-        # Find transfer tables for this chain
-        query = text("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_name LIKE :pattern
-        """)
-        result = session.execute(query, {'pattern': f'%_{chain_trigram.lower()}_erc20_transfer_event'})
-        tables = [row[0] for row in result.fetchall()]
+        # Discover dynamic ORM classes for this chain
+        available_classes = []
+        try:
+            tokens = session.query(Token).filter(
+                Token.trigram == chain_trigram.upper()
+            ).all()
+            
+            inspector = sa_inspect(session.get_bind())
+            existing_tables = set(inspector.get_table_names())
+            
+            for token in tokens:
+                table_name = f"{token.symbol.lower()}_{chain_trigram.lower()}_erc20_transfer_event"
+                if table_name in existing_tables:
+                    cls = get_transfer_event_class(token.symbol, chain_trigram)
+                    if cls:
+                        available_classes.append(cls)
+        except Exception as e:
+            logger.debug(f"Table discovery failed: {e}")
         
-        if not tables:
+        if not available_classes:
             logger.debug(f"No transfer tables found for chain {chain_trigram}")
             return None
         
-        # Aggregate features across all token tables
+        # Aggregate features across all token tables — pure ORM
         total_tx_in = 0
         total_tx_out = 0
         total_value_in = 0.0
         total_value_out = 0.0
         max_value = 0.0
         counterparties = set()
-        timestamps = []
         
-        for table_name in tables:
+        for cls in available_classes:
             try:
-                # Incoming transactions
-                in_query = text(f"""
-                    SELECT COUNT(*), COALESCE(SUM(value), 0), COALESCE(MAX(value), 0),
-                           array_agg(DISTINCT from_contract_address)
-                    FROM {table_name}
-                    WHERE LOWER(to_contract_address) = :addr
-                """)
-                in_result = session.execute(in_query, {'addr': address_lower}).fetchone()
+                # Incoming — pure ORM
+                in_row = session.query(
+                    func.count(cls.id),
+                    func.coalesce(func.sum(cls.value), 0),
+                    func.coalesce(func.max(cls.value), 0),
+                ).filter(
+                    func.lower(cls.to_contract_address) == address_lower
+                ).first()
                 
-                if in_result and in_result[0]:
-                    total_tx_in += in_result[0]
-                    total_value_in += float(in_result[1] or 0) / 1e18
-                    max_value = max(max_value, float(in_result[2] or 0) / 1e18)
-                    if in_result[3]:
-                        counterparties.update([a.lower() for a in in_result[3] if a])
+                if in_row and in_row[0]:
+                    total_tx_in += in_row[0]
+                    total_value_in += float(in_row[1] or 0) / 1e18
+                    max_value = max(max_value, float(in_row[2] or 0) / 1e18)
                 
-                # Outgoing transactions
-                out_query = text(f"""
-                    SELECT COUNT(*), COALESCE(SUM(value), 0), COALESCE(MAX(value), 0),
-                           array_agg(DISTINCT to_contract_address)
-                    FROM {table_name}
-                    WHERE LOWER(from_contract_address) = :addr
-                """)
-                out_result = session.execute(out_query, {'addr': address_lower}).fetchone()
+                # Unique senders — pure ORM
+                in_senders = session.query(
+                    func.lower(cls.from_contract_address)
+                ).filter(
+                    func.lower(cls.to_contract_address) == address_lower
+                ).distinct().all()
+                counterparties.update([r[0] for r in in_senders if r[0]])
                 
-                if out_result and out_result[0]:
-                    total_tx_out += out_result[0]
-                    total_value_out += float(out_result[1] or 0) / 1e18
-                    max_value = max(max_value, float(out_result[2] or 0) / 1e18)
-                    if out_result[3]:
-                        counterparties.update([a.lower() for a in out_result[3] if a])
+                # Outgoing — pure ORM
+                out_row = session.query(
+                    func.count(cls.id),
+                    func.coalesce(func.sum(cls.value), 0),
+                    func.coalesce(func.max(cls.value), 0),
+                ).filter(
+                    func.lower(cls.from_contract_address) == address_lower
+                ).first()
+                
+                if out_row and out_row[0]:
+                    total_tx_out += out_row[0]
+                    total_value_out += float(out_row[1] or 0) / 1e18
+                    max_value = max(max_value, float(out_row[2] or 0) / 1e18)
+                
+                # Unique receivers — pure ORM
+                out_receivers = session.query(
+                    func.lower(cls.to_contract_address)
+                ).filter(
+                    func.lower(cls.from_contract_address) == address_lower
+                ).distinct().all()
+                counterparties.update([r[0] for r in out_receivers if r[0]])
                 
             except Exception as e:
-                logger.debug(f"Error querying table {table_name}: {e}")
+                logger.debug(f"Error querying table {cls.__tablename__}: {e}")
                 continue
         
         total_tx = total_tx_in + total_tx_out

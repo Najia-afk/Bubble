@@ -36,9 +36,10 @@ def check_wallet_activity(chain: str = None):
 
 
 def _check_wallet_transactions(wallet, data):
-    """Check database for new transactions involving wallet."""
+    """Check database for new transactions involving wallet using dynamic ORM classes."""
     from utils.database import get_session_factory
-    from sqlalchemy import text
+    from sqlalchemy import func, inspect as sa_inspect
+    from api.application.erc20models import Token, get_transfer_event_class
     
     alerts = []
     Session = get_session_factory()
@@ -46,16 +47,33 @@ def _check_wallet_transactions(wallet, data):
     cutoff = datetime.utcnow() - timedelta(hours=1)
     
     try:
-        tables = session.execute(text(
-            "SELECT table_name FROM information_schema.tables WHERE table_name LIKE :pattern"
-        ), {'pattern': f'%_{wallet.chain_code.lower()}_erc20_transfer_event'}).fetchall()
+        # Discover dynamic ORM classes for this chain
+        tokens = session.query(Token).filter(
+            Token.trigram == wallet.chain_code.upper()
+        ).all()
         
-        for (table_name,) in tables:
-            for tx in session.execute(text(f"""
-                SELECT to_contract_address, hash FROM {table_name}
-                WHERE LOWER(from_contract_address) = :addr AND timestamp >= :cutoff LIMIT 50
-            """), {'addr': wallet.address.lower(), 'cutoff': cutoff}):
-                to_addr, tx_hash = tx
+        inspector = sa_inspect(session.get_bind())
+        existing_tables = set(inspector.get_table_names())
+        
+        for token in tokens:
+            table_name = f"{token.symbol.lower()}_{wallet.chain_code.lower()}_erc20_transfer_event"
+            if table_name not in existing_tables:
+                continue
+            
+            cls = get_transfer_event_class(token.symbol, wallet.chain_code)
+            if cls is None:
+                continue
+            
+            # Query outgoing transfers — pure ORM
+            rows = session.query(
+                cls.to_contract_address,
+                cls.hash,
+            ).filter(
+                func.lower(cls.from_contract_address) == wallet.address.lower(),
+                cls.timestamp >= cutoff
+            ).limit(50).all()
+            
+            for to_addr, tx_hash in rows:
                 alert_type = 'mixer' if data.is_mixer(to_addr) else 'outgoing'
                 alerts.append({'type': alert_type, 'counterparty': to_addr, 'tx_hash': tx_hash})
     finally:

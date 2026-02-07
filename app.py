@@ -3,10 +3,11 @@
 # Copyright (c) 2025-2026 All Rights Reserved.
 # =============================================================================
 
-from flask import Flask, g, jsonify, request, render_template
+from flask import Flask, g, jsonify, request, render_template, redirect
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
 from sqlalchemy.orm import sessionmaker
+from datetime import datetime
 import logging
 from config.settings import Config, get_config
 from utils.database import get_session_factory
@@ -45,35 +46,60 @@ def create_app():
     app_logger = setup_logging('application.log')
 
     def initialize_database():
-        """Initialize database with core models and CSV data."""
+        """Initialize database with core models and CSV data.
+        Uses a PostgreSQL advisory lock to prevent race conditions
+        when multiple Gunicorn workers start simultaneously.
+        """
         from api.application.models import Base as CoreBase
         from scripts.init_db import DatabaseInitializer
+        from sqlalchemy import text
         
         session = SessionFactory()
         try:
             engine = session.get_bind()
             
-            # Create core tables from models.py
-            CoreBase.metadata.create_all(engine)
-            app_logger.info("Core tables created")
+            # Use advisory lock (ID 42) to ensure only one worker inits the DB
+            lock_acquired = session.execute(
+                text("SELECT pg_try_advisory_lock(42)")
+            ).scalar()
             
-            # Create legacy tables from erc20models
-            erc20models.Base.metadata.create_all(engine)
-            app_logger.info("Legacy tables created")
+            if not lock_acquired:
+                app_logger.info("Another worker is initializing the database, skipping")
+                return
             
-            # Load CSV data if not already done
             try:
-                initializer = DatabaseInitializer(str(engine.url))
-                initializer.init_all(force=False)
-                app_logger.info("CSV data loaded")
-            except Exception as e:
-                app_logger.warning(f"CSV init skipped: {e}")
-            
-            # Generate dynamic ERC20 models
-            erc20models.generate_block_transfer_event_classes(session)
-            erc20models.generate_erc20_classes(session)
-            session.commit()
-            app_logger.info("Database initialization complete")
+                # Create core tables from models.py
+                CoreBase.metadata.create_all(engine, checkfirst=True)
+                app_logger.info("Core tables created/verified")
+                
+                # Create ERC20/ML tables
+                erc20models.Base.metadata.create_all(engine, checkfirst=True)
+                app_logger.info("ERC20 tables created/verified")
+                session.commit()
+                
+                # Load CSV data if not already done
+                try:
+                    initializer = DatabaseInitializer(engine.url.render_as_string(hide_password=False))
+                    initializer.init_all(force=False)
+                    app_logger.info("CSV data loaded")
+                except Exception as e:
+                    app_logger.warning(f"CSV init skipped: {e}")
+                
+                # Generate dynamic ERC20 models (only if tokens exist)
+                try:
+                    erc20models.generate_block_transfer_event_classes(session)
+                    erc20models.generate_erc20_classes(session)
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    app_logger.warning(f"Dynamic model generation skipped: {e}")
+                
+                app_logger.info("Database initialization complete")
+            finally:
+                # Always release the advisory lock
+                session.execute(text("SELECT pg_advisory_unlock(42)"))
+                session.commit()
+                
         except Exception as e:
             session.rollback()
             app_logger.error(f"Database initialization error: {e}")
@@ -124,6 +150,12 @@ def create_app():
         """Full graph visualization - can load investigation data via query params"""
         investigation_id = request.args.get('investigation_id')
         return render_template('visualizations/transaction_flow.html', investigation_id=investigation_id)
+
+    @app.route('/timeline')
+    @app.route('/timeline/<int:investigation_id>')
+    def timeline_page(investigation_id=None):
+        """Interactive timeline visualization (vis.js)"""
+        return render_template('visualizations/timeline.html')
     
     # ========================================================================
     # INVESTIGATION & ML PAGES
@@ -171,17 +203,16 @@ def create_app():
 
     # Register API routes
     from api.routes import init_api_routes
-    from datetime import datetime
     
     # Single API surface
     init_api_routes(app)
     
-    # Setup GraphQL endpoint (manual - no flask-graphql needed)
-    from graphql_app.schemas.fetch_erc20_transfer_history_schema import schema as erc20_schema
+    # Setup GraphQL endpoint — combined schema (all domains)
+    from graphql_app.schemas.combined_schema import combined_schema
     
     @app.route('/graphql', methods=['GET', 'POST'])
     def graphql_endpoint():
-        """GraphQL endpoint with GraphiQL interface"""
+        """GraphQL endpoint with GraphiQL interface — all schemas merged."""
         if request.method == 'GET':
             # Return GraphiQL HTML interface
             return '''<!DOCTYPE html>
@@ -216,7 +247,7 @@ def create_app():
         query = data.get('query', '')
         variables = data.get('variables', {})
         
-        result = erc20_schema.execute(
+        result = combined_schema.execute(
             query,
             variables=variables,
             context={'session': g.db_session}
@@ -230,10 +261,7 @@ def create_app():
 
     return app
 
+
 if __name__ == "__main__":
     app = create_app()
     app.run(debug=True, host='0.0.0.0', port=5000)
-
-
-
-

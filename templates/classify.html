@@ -4,417 +4,81 @@
 
 {% block extra_css %}
 <style>
-    .page-header {
-        margin-bottom: 2rem;
-    }
-    
-    .page-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-    
-    .page-subtitle {
-        color: var(--text-secondary);
-        margin-top: 0.25rem;
-    }
-    
+    /* Classification form */
     .classify-form {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 2rem;
+        background: var(--bg-secondary); border: 1px solid var(--border-color);
+        border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;
     }
-    
-    .form-row {
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-    }
-    
-    .form-group {
-        flex: 1;
-        min-width: 200px;
-    }
-    
-    .form-group label {
-        display: block;
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-    }
-    
-    .form-group input,
-    .form-group select {
-        width: 100%;
-        padding: 0.75rem;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        font-size: 1rem;
-    }
-    
-    .btn-primary {
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 0.75rem 2rem;
-        border-radius: 6px;
-        font-weight: 600;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .btn-primary:hover {
-        background: var(--primary-hover);
-    }
-    
-    .btn-primary:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-    
-    .result-card {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        overflow: hidden;
-        margin-bottom: 1.5rem;
-    }
-    
-    .result-header {
-        padding: 1.25rem;
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .result-title {
-        font-weight: 600;
-        font-size: 1.125rem;
-    }
-    
-    .result-body {
-        padding: 1.5rem;
-    }
-    
-    .prediction-box {
-        display: flex;
-        align-items: center;
-        gap: 1.5rem;
-        padding: 1.5rem;
-        background: var(--bg-secondary);
-        border-radius: 8px;
-        margin-bottom: 1.5rem;
-    }
-    
-    .prediction-type {
-        font-size: 2rem;
-        font-weight: 700;
-        text-transform: capitalize;
-    }
-    
+    .form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+    /* Prediction display */
+    .result-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem; }
+    .result-header { padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+    .result-title { font-weight: 600; font-size: 1.125rem; }
+    .result-body { padding: 1.5rem; }
+
+    .prediction-box { display: flex; align-items: center; gap: 1.5rem; padding: 1.5rem; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 1.5rem; }
+    .prediction-type { font-size: 2rem; font-weight: 700; text-transform: capitalize; }
     .prediction-type.exchange { color: #22c55e; }
     .prediction-type.bridge { color: #8b5cf6; }
     .prediction-type.mixer { color: #f59e0b; }
     .prediction-type.whale { color: #3b82f6; }
     .prediction-type.bot { color: #ef4444; }
-    .prediction-type.defi { color: #06b6d4; }
-    .prediction-type.unknown { color: #6b7280; }
-    
-    .confidence-bar {
-        flex: 1;
-    }
-    
-    .confidence-label {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        margin-bottom: 0.5rem;
-    }
-    
-    .confidence-track {
-        height: 12px;
-        background: var(--bg-primary);
-        border-radius: 6px;
-        overflow: hidden;
-    }
-    
-    .confidence-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e);
-        border-radius: 6px;
-        transition: width 0.5s;
-    }
-    
-    .confidence-value {
-        font-size: 1.5rem;
-        font-weight: 700;
-        text-align: right;
-        min-width: 80px;
-    }
-    
-    .features-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    .feature-item {
-        background: var(--bg-secondary);
-        padding: 1rem;
-        border-radius: 8px;
-        text-align: center;
-    }
-    
-    .feature-value {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-    
-    .feature-label {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-        margin-top: 0.25rem;
-    }
-    
-    /* SHAP Visualization */
-    .shap-section {
-        margin-top: 1.5rem;
-    }
-    
-    .shap-title {
-        font-weight: 600;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .shap-bar-container {
-        margin-bottom: 0.75rem;
-    }
-    
-    .shap-bar-label {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.875rem;
-        margin-bottom: 0.25rem;
-    }
-    
-    .shap-bar-track {
-        height: 24px;
-        background: var(--bg-secondary);
-        border-radius: 4px;
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .shap-bar-center {
-        position: absolute;
-        left: 50%;
-        top: 0;
-        bottom: 0;
-        width: 2px;
-        background: var(--border);
-    }
-    
-    .shap-bar-fill {
-        position: absolute;
-        top: 2px;
-        bottom: 2px;
-        border-radius: 2px;
-        transition: all 0.3s;
-    }
-    
-    .shap-bar-fill.positive {
-        background: #22c55e;
-        left: 50%;
-    }
-    
-    .shap-bar-fill.negative {
-        background: #ef4444;
-        right: 50%;
-    }
-    
-    .shap-legend {
-        display: flex;
-        justify-content: center;
-        gap: 2rem;
-        margin-top: 1rem;
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-    }
-    
-    .shap-legend-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .shap-legend-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 2px;
-    }
-    
+    .prediction-type.defi { color: var(--accent-cyan); }
+    .prediction-type.unknown { color: var(--text-muted); }
+
+    /* Confidence bar */
+    .confidence-bar { flex: 1; }
+    .confidence-label { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+    .confidence-track { height: 12px; background: var(--bg-primary); border-radius: 6px; overflow: hidden; }
+    .confidence-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e); border-radius: 6px; transition: width 0.5s; }
+    .confidence-value { font-size: 1.5rem; font-weight: 700; text-align: right; min-width: 80px; }
+
+    /* Features grid */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .feature-item { background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; text-align: center; }
+    .feature-value { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
+    .feature-label { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; }
+
+    /* SHAP visualization */
+    .shap-section { margin-top: 1.5rem; }
+    .shap-title { font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .shap-bar-container { margin-bottom: 0.75rem; }
+    .shap-bar-label { display: flex; justify-content: space-between; font-size: 0.875rem; margin-bottom: 0.25rem; }
+    .shap-bar-track { height: 24px; background: var(--bg-tertiary); border-radius: 4px; position: relative; overflow: hidden; }
+    .shap-bar-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--border-color); }
+    .shap-bar-fill { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; transition: all 0.3s; }
+    .shap-bar-fill.positive { background: #22c55e; left: 50%; }
+    .shap-bar-fill.negative { background: #ef4444; right: 50%; }
+    .shap-legend { display: flex; justify-content: center; gap: 2rem; margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary); }
+    .shap-legend-item { display: flex; align-items: center; gap: 0.5rem; }
+    .shap-legend-dot { width: 12px; height: 12px; border-radius: 2px; }
     .shap-legend-dot.positive { background: #22c55e; }
     .shap-legend-dot.negative { background: #ef4444; }
-    
+
     /* Probability distribution */
-    .probabilities {
-        margin-top: 1.5rem;
-    }
-    
-    .prob-item {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .prob-label {
-        width: 100px;
-        font-size: 0.875rem;
-        text-transform: capitalize;
-    }
-    
-    .prob-bar {
-        flex: 1;
-        height: 20px;
-        background: var(--bg-secondary);
-        border-radius: 4px;
-        overflow: hidden;
-    }
-    
-    .prob-fill {
-        height: 100%;
-        border-radius: 4px;
-        transition: width 0.5s;
-    }
-    
-    .prob-value {
-        width: 50px;
-        text-align: right;
-        font-size: 0.875rem;
-        font-weight: 600;
-    }
-    
-    /* Validation section */
-    .validation-section {
-        margin-top: 2rem;
-        padding-top: 1.5rem;
-        border-top: 1px solid var(--border);
-    }
-    
-    .validation-title {
-        font-weight: 600;
-        margin-bottom: 1rem;
-    }
-    
-    .validation-buttons {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    
-    .btn-validate {
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        border: 1px solid var(--border);
-        background: var(--bg-secondary);
-        cursor: pointer;
-        font-size: 0.875rem;
-        transition: all 0.2s;
-    }
-    
-    .btn-validate:hover {
-        background: var(--bg-hover);
-    }
-    
-    .btn-validate.confirm {
-        background: #dcfce7;
-        border-color: #22c55e;
-        color: #166534;
-    }
-    
-    .btn-validate.reject {
-        background: #fee2e2;
-        border-color: #ef4444;
-        color: #b91c1c;
-    }
-    
-    /* Empty state */
-    .empty-state {
-        text-align: center;
-        padding: 4rem 2rem;
-        color: var(--text-secondary);
-    }
-    
-    .empty-state svg {
-        width: 64px;
-        height: 64px;
-        margin-bottom: 1rem;
-        opacity: 0.5;
-    }
-    
+    .probabilities { margin-top: 1.5rem; }
+    .prob-item { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .prob-label { width: 100px; font-size: 0.875rem; text-transform: capitalize; }
+    .prob-bar { flex: 1; height: 20px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; }
+    .prob-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+    .prob-value { width: 50px; text-align: right; font-size: 0.875rem; font-weight: 600; }
+
+    /* Validation */
+    .validation-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); }
+    .validation-title { font-weight: 600; margin-bottom: 1rem; }
+    .validation-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .btn-validate { padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-tertiary); cursor: pointer; font-size: 0.875rem; transition: all 0.2s; color: var(--text-primary); }
+    .btn-validate:hover { background: var(--bg-hover); }
+    .btn-validate.confirm { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); color: #22c55e; }
+    .btn-validate.reject { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #ef4444; }
+
     /* History */
-    .history-section {
-        margin-top: 2rem;
-    }
-    
-    .history-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1rem;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        margin-bottom: 0.5rem;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .history-item:hover {
-        background: var(--bg-hover);
-    }
-    
-    .history-address {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.875rem;
-    }
-    
-    .history-meta {
-        display: flex;
-        gap: 1rem;
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-    }
-    
-    /* Loading */
-    .loading {
-        text-align: center;
-        padding: 2rem;
-    }
-    
-    .spinner {
-        display: inline-block;
-        width: 24px;
-        height: 24px;
-        border: 3px solid var(--border);
-        border-top-color: var(--primary);
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-    }
-    
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
+    .history-section { margin-top: 2rem; }
+    .history-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s; }
+    .history-item:hover { background: var(--bg-hover); }
+    .history-address { font-family: var(--font-mono); font-size: 0.875rem; }
+    .history-meta { display: flex; gap: 1rem; font-size: 0.875rem; color: var(--text-secondary); }
 </style>
 {% endblock %}
 
@@ -447,7 +111,7 @@
                 <input type="text" id="tokenInput" name="token" placeholder="GHST">
             </div>
             <div class="form-group" style="display: flex; align-items: flex-end;">
-                <button type="submit" class="btn-primary" id="classifyBtn">
+                <button type="submit" class="btn btn-primary" id="classifyBtn">
                     <span class="spinner" style="display:none;" id="loadingSpinner"></span>
                     🔍 Classify
                 </button>

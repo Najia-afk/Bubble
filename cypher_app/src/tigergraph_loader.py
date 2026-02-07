@@ -5,12 +5,16 @@ Syncs data from PostgreSQL to TigerGraph
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Set
-from sqlalchemy import text
+from sqlalchemy import func, inspect as sa_inspect
 
 from cypher_app.utils.tigergraph_client import get_tg_client
 from utils.database import get_session_factory
 from utils.logging_config import setup_logging
-from api.application.erc20models import Token, TokenPriceHistory, WalletLabel, KnownBridge, CHAIN_ID_TO_TRIGRAM, TRIGRAM_TO_CHAIN_ID
+from api.application.erc20models import (
+    Token, TokenPriceHistory, WalletLabel, KnownBridge,
+    CHAIN_ID_TO_TRIGRAM, TRIGRAM_TO_CHAIN_ID,
+    get_transfer_event_class, get_block_transfer_event_class
+)
 
 logger = setup_logging('tigergraph_loader.log')
 
@@ -116,27 +120,32 @@ class TigerGraphLoader:
             # Build dynamic table name
             table_name = f"{token_symbol.lower()}_{chain_trigram.lower()}_erc20_transfer_event"
             
-            # Query last 24h of transfers
+            # Query last 24h of transfers using dynamic ORM classes — pure SQLAlchemy
             cutoff_time = datetime.now() - timedelta(hours=24)
             
-            query = text(f"""
-                SELECT 
-                    e.hash as tx_hash,
-                    e.from_contract_address,
-                    e.to_contract_address,
-                    e.value,
-                    b.timestamp,
-                    b.block_number,
-                    b.block_hash
-                FROM {table_name} e
-                JOIN {chain_trigram.lower()}_block_transfer_event b ON e.block_event_hash = b.hash
-                WHERE b.timestamp >= :cutoff_time
-                ORDER BY b.timestamp DESC
-                LIMIT 10000
-            """)
+            transfer_cls = get_transfer_event_class(token_symbol, chain_trigram)
+            block_cls = get_block_transfer_event_class(chain_trigram)
             
-            result = session.execute(query, {'cutoff_time': cutoff_time})
-            transfers = result.fetchall()
+            if transfer_cls is None or block_cls is None:
+                logger.error(f"Dynamic ORM class not found for {token_symbol}/{chain_trigram}")
+                return False
+            
+            transfers = session.query(
+                transfer_cls.hash.label('tx_hash'),
+                transfer_cls.from_contract_address,
+                transfer_cls.to_contract_address,
+                transfer_cls.value,
+                block_cls.timestamp,
+                block_cls.block_number,
+                block_cls.block_hash,
+            ).join(
+                block_cls,
+                transfer_cls.block_event_hash == block_cls.hash
+            ).filter(
+                block_cls.timestamp >= cutoff_time
+            ).order_by(
+                block_cls.timestamp.desc()
+            ).limit(10000).all()
             
             if not transfers:
                 logger.info(f"No transfers found for {token_symbol} on {chain_trigram} in last 24h")
