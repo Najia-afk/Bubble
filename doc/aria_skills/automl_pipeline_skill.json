@@ -1,0 +1,120 @@
+{
+  "skill_id": "automl_pipeline",
+  "name": "AutoML Pipeline",
+  "version": "1.0.0",
+  "description": "Automated model selection, hyperparameter tuning, and promotion pipeline for wallet classification",
+  "trigger": "manual | scheduled | on_new_data",
+
+  "pipeline": {
+    "steps": [
+      {
+        "id": "data_preparation",
+        "name": "Prepare Training Data",
+        "description": "Load labeled wallets from all investigations, extract 24+ features, split train/test",
+        "source_module": "notebooks.src.automl_engine.prepare_training_data",
+        "inputs": {
+          "min_samples": 30,
+          "test_size": 0.2
+        },
+        "outputs": {
+          "X_train": "DataFrame",
+          "X_test": "DataFrame",
+          "y_train": "Series",
+          "y_test": "Series",
+          "feature_names": "List[str]"
+        }
+      },
+      {
+        "id": "class_balancing",
+        "name": "SMOTE Balancing",
+        "description": "Apply SMOTE to balance minority classes in training set",
+        "source_module": "imblearn.over_sampling.SMOTE",
+        "optional": true,
+        "depends_on": ["data_preparation"]
+      },
+      {
+        "id": "model_selection",
+        "name": "Candidate Model Tuning",
+        "description": "Run Optuna hyperparameter search on 5-7 candidate models",
+        "source_module": "notebooks.src.automl_engine.tune_model",
+        "depends_on": ["class_balancing"],
+        "candidate_models": [
+          "random_forest",
+          "gradient_boosting",
+          "extra_trees",
+          "logistic_regression",
+          "svm",
+          "xgboost (optional)",
+          "lightgbm (optional)"
+        ],
+        "tuning_config": {
+          "n_trials": 15,
+          "timeout_per_model": 120,
+          "cv_folds": 5,
+          "scoring": "f1_weighted"
+        }
+      },
+      {
+        "id": "evaluation",
+        "name": "Held-Out Evaluation",
+        "description": "Evaluate all tuned models on held-out test set",
+        "source_module": "notebooks.src.automl_engine.evaluate_model",
+        "depends_on": ["model_selection"],
+        "metrics": [
+          "accuracy",
+          "f1_weighted",
+          "f1_macro",
+          "precision_weighted",
+          "recall_weighted",
+          "confusion_matrix",
+          "shap_importance",
+          "cv_gap"
+        ]
+      },
+      {
+        "id": "promotion",
+        "name": "Champion Promotion",
+        "description": "Register best model in MLflow, promote to Production stage",
+        "source_module": "notebooks.src.automl_engine.BubbleAutoML.promote_best",
+        "depends_on": ["evaluation"],
+        "targets": ["mlflow", "local_pickle"],
+        "fallback": "save_local"
+      },
+      {
+        "id": "reporting",
+        "name": "Report Generation",
+        "description": "Generate markdown report with leaderboard, feature importance, recommendations",
+        "source_module": "notebooks.src.automl_engine.BubbleAutoML.save_report",
+        "depends_on": ["promotion"],
+        "output_format": "markdown",
+        "output_path": "reports/ml/automl_report_{timestamp}.md"
+      }
+    ]
+  },
+
+  "label_encoding": {
+    "unknown": 0, "exchange": 1, "bridge": 2, "mixer": 3,
+    "defi": 4, "whale": 5, "bot": 6, "normal": 7, "attacker": 8, "suspect": 9
+  },
+
+  "features": {
+    "transaction": ["tx_count", "unique_counterparties", "avg_tx_value", "median_tx_value", "max_tx_value", "min_tx_value", "std_tx_value", "total_volume"],
+    "balance": ["in_count", "out_count", "in_volume", "out_volume", "in_out_ratio", "volume_ratio", "avg_in_value", "avg_out_value"],
+    "network": ["unique_in_counterparties", "unique_out_counterparties", "counterparty_concentration"],
+    "behavioral": ["value_entropy", "activity_span_days", "avg_txs_per_day", "large_tx_ratio", "round_number_ratio"]
+  },
+
+  "quality_gates": {
+    "min_training_samples": 50,
+    "max_cv_gap": 0.15,
+    "min_f1_threshold": 0.60,
+    "min_classes": 3
+  },
+
+  "resource_constraints": {
+    "max_parallel_models": 1,
+    "max_memory_mb": 2048,
+    "n_jobs": 1,
+    "optuna_timeout_total": 900
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "skill_id": "autonomous_loop",
+  "name": "Autonomous Investigation Loop",
+  "version": "1.0.0",
+  "description": "End-to-end autonomous pipeline: OSINT intake → investigation → ML training → reporting → repeat",
+
+  "architecture": {
+    "diagram": "OSINT Feed → Case Intake → Investigation Pipeline → ML Training → Report Generation → LLM Enrichment → Loop",
+    "components": [
+      {
+        "name": "Case Scanner",
+        "source": "scripts/autonomous_loop.py::get_pending_cases",
+        "description": "Scans reports/cases/ for cases with 'Pending Investigation' status and seed wallets"
+      },
+      {
+        "name": "Investigation Runner",
+        "source": "scripts/autonomous_runner.py::run_full_pipeline",
+        "description": "Creates cases/investigations via API, runs 6-step skill, classifies wallets"
+      },
+      {
+        "name": "AutoML Engine",
+        "source": "notebooks/src/automl_engine.py::BubbleAutoML",
+        "description": "Automated model selection from 5-7 candidates with Optuna tuning"
+      },
+      {
+        "name": "Report Generator",
+        "source": "scripts/report_generator.py::ReportGenerator",
+        "description": "Generates structured markdown reports for LLM consumption"
+      },
+      {
+        "name": "State Manager",
+        "source": "scripts/autonomous_loop.py::AutonomousState",
+        "description": "Tracks processed cases, last training time, champion model"
+      }
+    ]
+  },
+
+  "execution_modes": {
+    "single_cycle": "python scripts/autonomous_loop.py",
+    "daemon": "python scripts/autonomous_loop.py --daemon --interval 3600",
+    "case_specific": "python scripts/autonomous_runner.py --case CASE-2026-009",
+    "train_only": "python scripts/autonomous_runner.py --train-only",
+    "notebook": "notebooks/05_auto_ml.ipynb"
+  },
+
+  "state_persistence": {
+    "file": "logs/autonomous_state.json",
+    "tracked_fields": [
+      "processed_cases",
+      "last_training",
+      "last_report",
+      "total_runs",
+      "total_wallets_classified",
+      "champion_model",
+      "champion_f1"
+    ]
+  },
+
+  "rate_limiting": {
+    "etherscan_calls_per_second": 5,
+    "sleep_between_cases": 10,
+    "sleep_between_steps": 5,
+    "poll_interval": 30,
+    "max_wait_per_investigation": 900,
+    "retrain_cooldown_hours": 24
+  },
+
+  "resource_constraints": {
+    "max_parallel_investigations": 1,
+    "max_memory_mb": 4096,
+    "optuna_trials_per_model": 10,
+    "optuna_timeout_per_model": 90,
+    "n_jobs": 1
+  },
+
+  "outputs": {
+    "case_reports": "reports/cases/CASE-2026-*.md",
+    "ml_reports": "reports/ml/automl_report_*.md",
+    "platform_summary": "reports/platform_summary.md",
+    "run_summaries": "reports/ml/autonomous_run_*.md",
+    "logs": "logs/autonomous_loop.log"
+  }
+}

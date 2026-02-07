@@ -49,7 +49,34 @@ Bubble cases are sourced from publicly available on-chain investigations by well
 | CASE-2026-005 | @PeckShieldAlert, @SlowMist_Team | GANA Payment exploit — real-time alerts |
 | CASE-2026-006 | OSINT / Google Play Store reports | Fake Hyperliquid app — community reports |
 | CASE-2026-007 | @PeckShieldAlert, @zachxbt | Garden Finance exploit — $10.8M traced |
-| CASE-2026-008 | OSINT / HyperEVM community | Hypurr NFT drain — community discovered |
+| CASE-2026-008 | OSINT / HyperEVM community | Hypurr NFT drain — community discovered, E2E validated |
+| CASE-2026-009 | rekt.news, @PeckShieldAlert, @BlockscopeCo | TrueBit Protocol $26.2M overflow exploit — serial "relic hunter" |
+| CASE-2026-010 | rekt.news, @CertiKAlert, @cosmoslabs_io | Saga IBC $7M bridge exploit — Ethermint codebase vuln |
+| CASE-2026-011 | rekt.news, @CertiKAlert, CoinTelegraph | Step Finance $27.3M SOL drain — exec device compromise (Solana, documented only) |
+| CASE-2026-012 | rekt.news | Makina $4.13M oracle manipulation — flash loan |
+| CASE-2026-013 | rekt.news | Yearn Finance v4 $293K — legacy code recycled error |
+| CASE-2026-014 | rekt.news | TMXTribe $1.4M logic bug — possible exit scam |
+
+### Attack Vector Distribution (14 cases)
+
+| Vector | Count | Example |
+|--------|-------|---------|
+| Smart Contract Exploit | 4 | GANA, Garden Finance, TrueBit, Makina |
+| Key Compromise / Social Eng. | 3 | Private Key, Danny/Meech, Step Finance |
+| Legacy Code | 2 | TrueBit (overflow), Yearn (recycled bug) |
+| NFT/Token Drain | 2 | Hypurr, Multi-chain Wallet |
+| Bridge/IBC Exploit | 1 | Saga IBC |
+| Supply Chain | 1 | Trust Wallet Extension |
+| Possible Exit Scam | 1 | TMXTribe |
+
+### Chain Coverage
+
+| Chain | Cases |
+|-------|-------|
+| Ethereum | 10 (CASE-001 through 010, 012-014) |
+| Solana | 1 (CASE-011, documented only) |
+| BSC | 2 (cross-chain in CASE-005, 007) |
+| Multi-chain | 3 (CASE-001, 005, 007) |
 
 ## Case Selection Criteria
 

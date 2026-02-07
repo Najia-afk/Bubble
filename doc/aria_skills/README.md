@@ -11,6 +11,8 @@ Aria Skills are automated, composable investigation pipelines that orchestrate b
 | [investigation_skill.json](investigation_skill.json) | investigation | `POST /api/cases/{id}/run-skill` | Full 6-step AML investigation pipeline |
 | [ml_classification_skill.json](ml_classification_skill.json) | ml | `POST /api/classify` | ML + heuristic wallet classification |
 | [risk_scoring_skill.json](risk_scoring_skill.json) | risk | Internal (step 5 of investigation) | Composite risk scoring algorithm |
+| [automl_pipeline_skill.json](automl_pipeline_skill.json) | ml | `notebooks/05_auto_ml.ipynb` | AutoML: 7 models × Optuna tuning → champion promotion |
+| [autonomous_loop_skill.json](autonomous_loop_skill.json) | orchestration | `scripts/autonomous_loop.py` | Continuous: scan → investigate → train → report |
 
 ## Investigation Skill Pipeline
 

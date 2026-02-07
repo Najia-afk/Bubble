@@ -152,3 +152,59 @@ risk_score = min(100, base_score + contextual_adjustments)
 # Labels
 CRITICAL ≥ 70  |  HIGH ≥ 50  |  MEDIUM ≥ 25  |  LOW < 25
 ```
+## Autonomous Pipeline Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                    AUTONOMOUS INVESTIGATION LOOP                      │
+│                                                                      │
+│  ┌─────────────┐    ┌──────────────┐    ┌────────────────────────┐  │
+│  │ OSINT Feed  │───▶│ Case Scanner │───▶│ Investigation Pipeline │  │
+│  │ (ZachXBT,   │    │ reports/     │    │ 6-step skill:          │  │
+│  │  rekt.news, │    │ cases/*.md   │    │  import → trace →      │  │
+│  │  PeckShield)│    │              │    │  expand → classify →   │  │
+│  └─────────────┘    └──────────────┘    │  assess → report      │  │
+│                                         └───────────┬────────────┘  │
+│                                                     │               │
+│  ┌─────────────┐    ┌──────────────┐    ┌──────────▼────────────┐  │
+│  │ LLM Report  │◀───│   Report     │◀───│  AutoML Engine        │  │
+│  │ Enrichment  │    │  Generator   │    │  7 models × Optuna    │  │
+│  │ (Aria)      │    │  Markdown    │    │  → Champion promotion │  │
+│  └─────────────┘    └──────────────┘    └───────────────────────┘  │
+│                                                                      │
+│  State: logs/autonomous_state.json                                   │
+│  Logs:  logs/autonomous_loop.log                                     │
+│  Cycle: 1 hour (configurable)                                        │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### AutoML Model Selection
+
+| Model | Type | Default | Optuna Tuned |
+|-------|------|---------|--------------|
+| RandomForest | Ensemble | ✅ | n_estimators, max_depth, min_samples |
+| GradientBoosting | Ensemble | ✅ | n_estimators, learning_rate, subsample |
+| ExtraTrees | Ensemble | ✅ | n_estimators, max_depth |
+| LogisticRegression | Linear | ✅ | C, penalty, solver |
+| SVM | Kernel | ✅ | C, kernel, gamma |
+| XGBoost | Gradient | Optional | + reg_alpha, reg_lambda, colsample |
+| LightGBM | Gradient | Optional | + num_leaves, reg_alpha, reg_lambda |
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/autonomous_loop.py` | Continuous daemon: scan → investigate → train → report |
+| `scripts/autonomous_runner.py` | One-shot pipeline for specific cases |
+| `scripts/report_generator.py` | Structured markdown reports for LLM consumption |
+| `notebooks/05_auto_ml.ipynb` | Interactive AutoML with visualizations |
+
+### Notebooks
+
+| Notebook | Purpose |
+|----------|---------|
+| `01_wallet_tagging.ipynb` | Feature engineering + model training |
+| `02_victim_classification.ipynb` | Incoming sender classification |
+| `03_path_analysis.ipynb` | Fund flow graph analysis |
+| `04_aml_monitoring.ipynb` | Alert rules engine + dashboard |
+| `05_auto_ml.ipynb` | **AutoML**: 7 models, Optuna, SHAP, auto-promote |
