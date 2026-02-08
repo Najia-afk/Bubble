@@ -1,0 +1,146 @@
+Loaded: champion_ExtraTrees_20260207_213203.pkl
+Classes: ['attacker', 'exchange', 'mixer', 'related', 'suspect']
+Features: 24
+✅ Initialized with 249 transfers
+✅ Initialized with 394,399 transfers
+✅ Initialized with 120,799 transfers
+✅ Initialized with 35 transfers
+✅ Initialized with 19,917 transfers
+✅ Initialized with 209,919 transfers
+✅ Initialized with 206,814 transfers
+✅ Initialized with 200,847 transfers
+
+============================================================
+FULL CLASSIFICATION REPORT (ExtraTrees Champion)
+============================================================
+              precision    recall  f1-score   support
+
+    attacker     1.0000    0.6667    0.8000         3
+    exchange     0.8077    1.0000    0.8936        21
+       mixer     1.0000    1.0000    1.0000         3
+     related     0.9118    0.9118    0.9118        34
+     suspect     1.0000    0.7143    0.8333        14
+
+    accuracy                         0.8933        75
+   macro avg     0.9439    0.8585    0.8877        75
+weighted avg     0.9062    0.8933    0.8911        75
+
+
+============================================================
+CONFUSION MATRIX
+============================================================
+Pred->    attacker    exchange       mixer     related     suspect
+attacker           2           0           0           1           0
+exchange           0          21           0           0           0
+   mixer           0           0           3           0           0
+ related           0           3           0          31           0
+ suspect           0           2           0           2          10
+
+============================================================
+PER-CLASS ANALYSIS
+============================================================
+  attacker      P=1.000  R=0.667  F1=0.800  n=  3  [GOOD]
+  exchange      P=0.808  R=1.000  F1=0.894  n= 21  [GOOD]
+  mixer         P=1.000  R=1.000  F1=1.000  n=  3  [GOOD]
+  related       P=0.912  R=0.912  F1=0.912  n= 34  [GOOD]
+  suspect       P=1.000  R=0.714  F1=0.833  n= 14  [GOOD]
+
+============================================================
+OVERFITTING ANALYSIS
+============================================================
+  CV F1 (mean±std):  0.9443 ± 0.0181
+  CV F1 (per fold):  0.970 0.918 0.931 0.947 0.955
+  Test F1:           0.8877
+  Gap:               -0.0565 (-5.7%)
+  VERDICT: Mild overfitting - acceptable with more data
+
+============================================================
+TOP 20 FEATURE IMPORTANCE
+============================================================
+   1. counterparty_concentration     0.1464  #####################
+   2. tx_count                       0.0921  #############
+   3. unique_counterparties          0.0916  #############
+   4. unique_out_counterparties      0.0906  #############
+   5. out_count                      0.0863  ############
+   6. value_entropy                  0.0781  ###########
+   7. unique_in_counterparties       0.0720  ##########
+   8. in_count                       0.0660  #########
+   9. avg_txs_per_day                0.0557  ########
+  10. activity_span_days             0.0453  ######
+  11. in_out_ratio                   0.0445  ######
+  12. round_number_ratio             0.0284  ####
+  13. volume_ratio                   0.0222  ###
+  14. median_tx_value                0.0177  ##
+  15. min_tx_value                   0.0132  #
+  16. out_volume                     0.0091  #
+  17. large_tx_ratio                 0.0085  #
+  18. total_volume                   0.0059  
+  19. in_volume                      0.0055  
+  20. max_tx_value                   0.0052  
+
+============================================================
+MODEL LEADERBOARD
+============================================================
+  Model                        CV F1  Test F1      Gap     Time  Status
+  -------------------------   ------   ------   ------   ------  ------
+  ExtraTrees                  0.9497   0.8882  -0.0615     9.0s  CHAMPION ***
+  LightGBM                    0.9395   0.7266  -0.2129   114.2s  OVERFIT
+  XGBoost                     0.9329   0.7173  -0.2156    50.8s  OVERFIT
+  GradientBoosting            0.9413   0.7155  -0.2257    95.3s  OVERFIT
+  RandomForest                0.9301   0.7117  -0.2183    11.5s  OVERFIT
+  LogisticRegression          0.7715   0.6435  -0.1279     1.6s  OVERFIT
+
+============================================================
+PREDICTIONS ON ALL INVESTIGATIONS
+============================================================
+✅ Initialized with 249 transfers
+  Inv #1:   7 wallets -> {'related': 6, 'attacker': 1}  (6/7 correct)
+✅ Initialized with 394,399 transfers
+  Inv #2:  48 wallets -> {'exchange': 42, 'related': 4, 'attacker': 1, 'suspect': 1}  (47/48 correct)
+✅ Initialized with 120,799 transfers
+  Inv #3:  96 wallets -> {'suspect': 40, 'exchange': 20, 'mixer': 14, 'related': 12, 'attacker': 10}  (86/96 correct)
+✅ Initialized with 35 transfers
+  Inv #4:   2 wallets -> {'attacker': 1, 'related': 1}  (2/2 correct)
+✅ Initialized with 19,917 transfers
+  Inv #5:  59 wallets -> {'related': 57, 'exchange': 2}  (58/59 correct)
+✅ Initialized with 209,919 transfers
+  Inv #6:  29 wallets -> {'exchange': 21, 'suspect': 5, 'related': 3}  (22/29 correct)
+✅ Initialized with 206,814 transfers
+  Inv #7:  75 wallets -> {'related': 52, 'exchange': 21, 'suspect': 1, 'mixer': 1}  (74/75 correct)
+✅ Initialized with 200,847 transfers
+  Inv #8:  58 wallets -> {'related': 37, 'exchange': 16, 'suspect': 4, 'mixer': 1}  (40/58 correct)
+
+  Total: 374 wallet predictions saved
+
+  Overall prediction distribution:
+related     172
+exchange    122
+suspect      51
+mixer        16
+attacker     13
+
+  Labeled accuracy: 335/374 = 89.6%
+
+============================================================
+CRITICAL ASSESSMENT
+============================================================
+
+STRENGTHS:
+  - ExtraTrees champion F1=0.8877 with only 5.7% generalization gap
+  - 5-class classification on blockchain wallet behavior
+  - Fast training: 9s
+
+WEAKNESSES:
+  - Small dataset: 374 labeled samples (75 test)
+  - Minority classes: attacker=16 + mixer=17: too few for reliable eval
+  - 5/6 models overfit by >20% (SMOTE on tiny classes creates memorizable synthetic points)
+  - CV scores inflated by SMOTE: models see SMOTE in training folds
+
+RECOMMENDATIONS:
+  1. Add more labeled wallets (target 1000+ samples, 100+ per class)
+  2. Use nested CV or leave-SMOTE-out to get honest CV estimates
+  3. Consider merging attacker+mixer into "illicit" class (33 vs 16/17)
+  4. Try feature selection (PCA or mutual info) to reduce dimensionality
+  5. Add temporal features (time-based patterns)
+  6. Calibrate predictions with Platt scaling
+

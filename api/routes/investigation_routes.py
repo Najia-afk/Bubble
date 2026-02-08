@@ -242,19 +242,29 @@ def get_investigation_graph(investigation_id):
     limit = int(request.args.get('limit', 500))
     include_external = request.args.get('include_external', 'true').lower() == 'true'
 
-    # Try from InvestigationTransfer records first
-    transfers = session.query(InvestigationTransfer).filter_by(
+    # Options for big-data mode
+    aggregate = request.args.get('aggregate', 'false').lower() == 'true'
+    max_edges = int(request.args.get('max_edges', 10000))
+
+    # Try from InvestigationTransfer records first (stream, don't load all)
+    transfer_count = session.query(InvestigationTransfer).filter_by(
         investigation_id=investigation_id
-    ).all()
-    if transfers:
+    ).count()
+    if transfer_count > 0:
+        transfer_q = session.query(InvestigationTransfer).filter_by(
+            investigation_id=investigation_id
+        ).yield_per(500)
+
         nodes = {}
         edges = []
         events = []
         min_ts = None
         max_ts = None
         edge_id = 0
+        # For big-data aggregation: (from, to, token, chain) → aggregated edge
+        agg_edges = {} if aggregate else None
 
-        for t in transfers:
+        for t in transfer_q:
             from_addr = t.from_address
             to_addr = t.to_address
             ts = int(t.timestamp.timestamp()) if t.timestamp else None
@@ -283,35 +293,84 @@ def get_investigation_graph(investigation_id):
 
             raw_val = t.value or 0
             decimals = t.token_decimals or 0
-            if raw_val > 1e18 and decimals > 0:
-                normalised_val = raw_val / (10 ** decimals)
-            elif raw_val > 1e30:
-                normalised_val = raw_val / 1e18
-            else:
+            if decimals > 0:
+                # value was properly normalized at sync (value_raw / 10^decimals)
                 normalised_val = raw_val
+            else:
+                # decimals=0 means API didn't report decimals;
+                # value = raw amount, needs normalization
+                if raw_val > 1e15:
+                    normalised_val = raw_val / 1e18   # assume 18 (EVM default)
+                else:
+                    normalised_val = raw_val
 
-            edges.append({
-                "id": edge_id, "from": from_addr, "to": to_addr,
-                "value": round(normalised_val, 6), "token": t.token_symbol,
-                "chain": t.chain_code, "timestamp": ts,
-                "hash": t.tx_hash, "blockNumber": t.block_number
-            })
-            edge_id += 1
+            # Clamp absurd values (spam/scam tokens with inflated supplies)
+            # Any single transfer > $1 quadrillion is data noise
+            if abs(normalised_val) > 1e15:
+                normalised_val = min(normalised_val, 1e15)
+
+            if aggregate:
+                key = (from_addr, to_addr, t.token_symbol or '', t.chain_code or '')
+                if key not in agg_edges:
+                    agg_edges[key] = {
+                        "from": from_addr, "to": to_addr,
+                        "value": 0, "token": t.token_symbol, "chain": t.chain_code,
+                        "tx_count": 0, "min_ts": ts, "max_ts": ts,
+                        "hash": t.tx_hash, "blockNumber": t.block_number,
+                    }
+                agg_edges[key]["value"] += normalised_val
+                agg_edges[key]["tx_count"] += 1
+                if ts:
+                    if agg_edges[key]["min_ts"] is None or ts < agg_edges[key]["min_ts"]:
+                        agg_edges[key]["min_ts"] = ts
+                    if agg_edges[key]["max_ts"] is None or ts > agg_edges[key]["max_ts"]:
+                        agg_edges[key]["max_ts"] = ts
+            else:
+                if edge_id < max_edges:
+                    edges.append({
+                        "id": edge_id, "from": from_addr, "to": to_addr,
+                        "value": round(normalised_val, 6), "token": t.token_symbol,
+                        "chain": t.chain_code, "timestamp": ts,
+                        "hash": t.tx_hash, "blockNumber": t.block_number
+                    })
+                edge_id += 1
 
             if ts:
-                events.append({
-                    "timestamp": ts, "from": from_addr, "to": to_addr,
-                    "token": t.token_symbol, "value": round(normalised_val, 6), "hash": t.tx_hash
-                })
                 if min_ts is None or ts < min_ts:
                     min_ts = ts
                 if max_ts is None or ts > max_ts:
                     max_ts = ts
 
+        # Finalise aggregated edges
+        if aggregate and agg_edges:
+            for idx, (key, agg) in enumerate(agg_edges.items()):
+                edges.append({
+                    "id": idx, "from": agg["from"], "to": agg["to"],
+                    "value": round(agg["value"], 6), "token": agg["token"],
+                    "chain": agg["chain"], "timestamp": agg["max_ts"],
+                    "hash": agg["hash"], "blockNumber": agg["blockNumber"],
+                    "tx_count": agg["tx_count"],
+                })
+            edge_id = transfer_count  # report full count
+
+        # Build lightweight events (only first 2000 for timeline)
+        events = []
+        if not aggregate:
+            for e in edges[:2000]:
+                if e.get("timestamp"):
+                    events.append({
+                        "timestamp": e["timestamp"], "from": e["from"], "to": e["to"],
+                        "token": e["token"], "value": e["value"], "hash": e["hash"]
+                    })
+
         return jsonify({
             "nodes": list(nodes.values()), "edges": edges, "events": events,
-            "stats": {"total_transfers": len(edges), "unique_wallets": len(nodes), "min_timestamp": min_ts, "max_timestamp": max_ts},
-            "message": "Loaded from investigation transfers"
+            "stats": {
+                "total_transfers": edge_id, "unique_wallets": len(nodes),
+                "min_timestamp": min_ts, "max_timestamp": max_ts,
+                "aggregated": aggregate, "edges_returned": len(edges),
+            },
+            "message": "Loaded from investigation transfers" + (" (aggregated)" if aggregate else "")
         }), 200
 
     # Fallback: use GraphQL to query live data
@@ -397,13 +456,24 @@ def get_investigation_graph(investigation_id):
                 continue
 
             if from_addr not in nodes:
-                nodes[from_addr] = {"id": from_addr, "label": f"{from_addr[:6]}...{from_addr[-4:]}", "is_case_wallet": is_case_from}
+                nodes[from_addr] = {
+                    "id": from_addr, "label": f"{from_addr[:6]}...{from_addr[-4:]}",
+                    "is_case_wallet": is_case_from,
+                    "role": wallet_roles.get(from_lower, 'external'),
+                    "depth": wallet_depths.get(from_lower, -1),
+                }
             if to_addr not in nodes:
-                nodes[to_addr] = {"id": to_addr, "label": f"{to_addr[:6]}...{to_addr[-4:]}", "is_case_wallet": is_case_to}
+                nodes[to_addr] = {
+                    "id": to_addr, "label": f"{to_addr[:6]}...{to_addr[-4:]}",
+                    "is_case_wallet": is_case_to,
+                    "role": wallet_roles.get(to_lower, 'external'),
+                    "depth": wallet_depths.get(to_lower, -1),
+                }
 
             edges.append({
                 "id": edge_id, "from": from_addr, "to": to_addr,
                 "value": tx.get('value'), "token": tx.get('tokenSymbol'),
+                "chain": trigram,
                 "timestamp": ts, "hash": tx.get('hash'), "blockNumber": tx.get('blockNumber')
             })
             edge_id += 1

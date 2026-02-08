@@ -3,41 +3,77 @@
 {% block title %}{% if investigation_id %}Case Graph{% else %}Transaction Graph{% endif %}{% endblock %}
 
 {% block extra_css %}
-<!-- G6 v5 – GPU-accelerated graph engine by Ant Group (MIT) -->
-<script src="https://unpkg.com/@antv/g6@5/dist/g6.min.js"></script>
+<!-- vis.js Network – stable, battle-tested graph engine -->
+<script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
 <style>
-    .investigation-header {
-        margin-bottom: 1.5rem;
-    }
+    .investigation-header { margin-bottom: 1.5rem; }
     .investigation-header .back-link {
-        color: var(--text-secondary);
-        text-decoration: none;
-        font-size: 0.85rem;
-        display: inline-block;
-        margin-bottom: 0.5rem;
+        color: var(--text-secondary); text-decoration: none; font-size: 0.85rem;
+        display: inline-block; margin-bottom: 0.5rem;
     }
-    .investigation-header .back-link:hover {
-        color: var(--primary);
+    .investigation-header .back-link:hover { color: var(--primary); }
+    .investigation-header .page-title { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+    .investigation-header .page-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem; }
+
+    /* Graph container – adaptive height */
+    #network-graph { position: relative; background: #0f172a; border-radius: 8px; min-height: 500px; height: calc(100vh - 340px); max-height: 900px; }
+    .vis-loading {
+        position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: rgba(15, 23, 42, 0.92); color: #94a3b8;
+        font-family: Inter, sans-serif; font-size: 0.9rem; z-index: 10;
+        border-radius: 8px;
     }
-    .investigation-header .page-title {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin: 0;
+    .vis-spinner {
+        width: 40px; height: 40px; border: 3px solid #334155; border-top: 3px solid #6366f1;
+        border-radius: 50%; animation: visspin 0.8s linear infinite; margin-bottom: 12px;
     }
-    .investigation-header .page-subtitle {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-        margin-top: 0.25rem;
+    @keyframes visspin { to { transform: rotate(360deg); } }
+
+    /* Summary mode panel */
+    .graph-summary {
+        background: var(--bg-secondary, #1e293b); border: 1px solid var(--border, #334155);
+        border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem;
     }
-    /* G6 toolbar */
-    .g6-toolbar { display: flex; gap: 0.25rem; align-items: center; }
-    .g6-toolbar button {
-        background: var(--bg-tertiary, #1e293b); border: 1px solid var(--border); border-radius: 4px;
-        color: var(--text-secondary); padding: 4px 10px; font-size: 0.8rem; cursor: pointer;
+    .graph-summary h4 { color: var(--text-primary, #f1f5f9); margin: 0 0 0.75rem 0; font-size: 0.95rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; }
+    .summary-stat {
+        background: var(--bg-tertiary, #0f172a); border: 1px solid var(--border, #334155);
+        border-radius: 6px; padding: 0.6rem 0.75rem; text-align: center;
     }
-    .g6-toolbar button:hover { background: var(--primary); color: #fff; }
-    .g6-toolbar button.active { background: var(--primary); color: #fff; }
+    .summary-stat .stat-label { font-size: 0.7rem; text-transform: uppercase; color: var(--text-secondary, #94a3b8); letter-spacing: 0.5px; }
+    .summary-stat .stat-val { font-size: 1.3rem; font-weight: 700; margin-top: 0.15rem; }
+    .flow-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.82rem; }
+    .flow-table th { text-align: left; color: var(--text-secondary, #94a3b8); padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border, #334155); font-weight: 500; }
+    .flow-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid rgba(51,65,85,0.3); color: var(--text-primary, #e2e8f0); }
+    .flow-arrow { color: #818cf8; font-weight: 600; }
+
+    /* Cluster insight panel */
+    .cluster-insights {
+        background: var(--bg-secondary, #1e293b); border: 1px solid var(--border, #334155);
+        border-radius: 8px; padding: 1rem; margin-top: 1rem;
+    }
+    .cluster-insights h4 { color: var(--text-primary, #f1f5f9); margin: 0 0 0.75rem 0; font-size: 0.95rem; }
+    .cluster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
+    .cluster-card {
+        background: var(--bg-tertiary, #0f172a); border: 1px solid var(--border, #334155);
+        border-radius: 6px; padding: 0.75rem; cursor: pointer; transition: border-color 0.2s;
+    }
+    .cluster-card:hover { border-color: var(--primary, #6366f1); }
+    .cluster-card .cluster-name { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem; }
+    .cluster-card .cluster-stat { font-size: 0.78rem; color: var(--text-secondary, #94a3b8); }
+    .cluster-card .cluster-bar { height: 3px; border-radius: 2px; margin-top: 0.5rem; background: var(--border, #334155); }
+    .cluster-card .cluster-bar-fill { height: 100%; border-radius: 2px; }
+
+    /* Mode badge */
+    .mode-badge { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; font-weight: 600; letter-spacing: 0.3px; vertical-align: middle; margin-left: 0.5rem; }
+    .mode-badge.simple { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .mode-badge.detail { background: rgba(99,102,241,0.15); color: #818cf8; }
+    .mode-badge.big { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+    /* Override vis.js nav button styling for dark theme */
+    div.vis-network div.vis-navigation div.vis-button { background-color: rgba(30, 41, 59, 0.8) !important; border: 1px solid #334155 !important; }
+    div.vis-network div.vis-navigation div.vis-button:hover { background-color: rgba(99, 102, 241, 0.5) !important; }
 </style>
 {% endblock %}
 
@@ -45,8 +81,8 @@
 {% if investigation_id %}
 <!-- Investigation Mode Header -->
 <div class="investigation-header" id="investigation-header">
-    <a href="/cases" class="back-link">← Back to Cases</a>
-    <h1 class="page-title" id="inv-title">Loading case...</h1>
+    <a href="/cases" class="back-link">&larr; Back to Cases</a>
+    <h1 class="page-title" id="inv-title">Loading case... <span class="mode-badge simple" id="mode-badge">SIMPLE</span></h1>
     <p class="page-subtitle" id="inv-subtitle"></p>
 </div>
 
@@ -56,47 +92,31 @@
         <label for="inv-min-value">Min Value:</label>
         <input type="number" id="inv-min-value" class="form-control" value="0" min="0" step="0.1" style="width: 100px;">
     </div>
-    
     <div class="control-group">
         <label for="inv-chain-filter">Chain:</label>
-        <select id="inv-chain-filter" class="form-control">
-            <option value="all">All Chains</option>
-        </select>
+        <select id="inv-chain-filter" class="form-control"><option value="all">All Chains</option></select>
     </div>
-    
     <div class="control-group">
         <label for="inv-token-filter">Token:</label>
-        <select id="inv-token-filter" class="form-control">
-            <option value="all">All Tokens</option>
-        </select>
+        <select id="inv-token-filter" class="form-control"><option value="all">All Tokens</option></select>
     </div>
-
     <div class="control-group" style="margin-left: auto;">
-        <button onclick="applyInvestigationFilters()" class="btn btn-primary">
-            Apply Filters
-        </button>
-        <button onclick="resetInvestigationFilters()" class="btn btn-secondary">
-            Reset
-        </button>
-        <button onclick="toggleLayout()" class="btn btn-secondary" id="layout-toggle-btn" title="Switch between flow and force layout">
-            ⇄ Layout
-        </button>
-        <button onclick="toggleCombos()" class="btn btn-secondary" id="combo-toggle-btn" title="Toggle role-based grouping">
-            ◎ Combos
-        </button>
-        <button onclick="exportGraph()" class="btn btn-secondary">
-            Export
-        </button>
+        <button onclick="applyInvestigationFilters()" class="btn btn-primary">Apply Filters</button>
+        <button onclick="resetInvestigationFilters()" class="btn btn-secondary">Reset</button>
+        <button onclick="toggleLayout()" class="btn btn-secondary" id="layout-toggle-btn" title="Switch layout">&zigrarr; Layout</button>
+        <button onclick="toggleClusters()" class="btn btn-secondary" id="cluster-toggle-btn" title="Toggle cluster view">&cir; Clusters</button>
+        <button onclick="toggleSummary()" class="btn btn-secondary" id="summary-toggle-btn" title="Toggle summary view">Summary</button>
+        <button onclick="exportGraph()" class="btn btn-secondary">Export</button>
     </div>
 </div>
 {% else %}
 <div class="page-header">
-    <h1 class="page-title">Transaction Flow Graph</h1>
-    <p class="page-subtitle">Visualize token transfer patterns • Powered by G6 v5 + GraphQL API</p>
+    <h1 class="page-title">Transaction Flow Graph <span class="mode-badge simple" id="mode-badge">SIMPLE</span></h1>
+    <p class="page-subtitle">Visualize token transfer patterns &bull; vis.js + GraphQL API</p>
 </div>
 {% endif %}
 
-<!-- Controls -->
+<!-- Controls (standard mode) -->
 <div class="controls-bar" {% if investigation_id %}style="display:none;" id="standard-controls"{% endif %}>
     <div class="control-group">
         <label for="chain-select">Chain:</label>
@@ -111,14 +131,10 @@
             <option value="FTM">Fantom</option>
         </select>
     </div>
-    
     <div class="control-group">
         <label for="token-select">Token:</label>
-        <select id="token-select" class="form-control">
-            <option value="">Loading tokens...</option>
-        </select>
+        <select id="token-select" class="form-control"><option value="">Loading tokens...</option></select>
     </div>
-    
     <div class="control-group">
         <label for="limit-select">Transactions:</label>
         <select id="limit-select" class="form-control">
@@ -126,109 +142,69 @@
             <option value="250">250</option>
             <option value="500" selected>500</option>
             <option value="1000">1,000</option>
+            <option value="5000">5,000</option>
         </select>
     </div>
-    
     <div class="control-group">
         <label for="min-value">Min Value:</label>
         <input type="number" id="min-value" class="form-control" value="0" min="0" step="1" style="width: 100px;">
     </div>
-
     <div class="control-group" style="margin-left: auto;">
-        <button onclick="loadGraph()" class="btn btn-primary">
-            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-            </svg>
-            Load Graph
-        </button>
-        <button onclick="exportGraph()" class="btn btn-secondary">
-            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-            </svg>
-            Export
-        </button>
-        <button onclick="toggleLayout()" class="btn btn-secondary" title="Switch layout">⇄ Layout</button>
-        <button onclick="toggleCombos()" class="btn btn-secondary" title="Toggle grouping">◎ Combos</button>
+        <button onclick="loadGraph()" class="btn btn-primary">Load Graph</button>
+        <button onclick="exportGraph()" class="btn btn-secondary">Export</button>
+        <button onclick="toggleLayout()" class="btn btn-secondary" id="layout-toggle-btn2" title="Switch layout">&zigrarr; Layout</button>
+        <button onclick="toggleClusters()" class="btn btn-secondary" id="cluster-toggle-btn2" title="Toggle clusters">&cir; Clusters</button>
+        <button onclick="toggleSummary()" class="btn btn-secondary" id="summary-toggle-btn2" title="Summary">Summary</button>
     </div>
+</div>
+
+<!-- Summary Panel (hidden by default, auto-shown for big graphs) -->
+<div class="graph-summary" id="graph-summary" style="display:none;">
+    <h4>Flow Summary <span style="font-size:0.75rem;color:var(--text-secondary);font-weight:400;">&mdash; Key insights at a glance</span></h4>
+    <div class="summary-grid" id="summary-grid"></div>
+    <div id="flow-table-container" style="margin-top:0.75rem;"></div>
 </div>
 
 <!-- Stats Row -->
 <div class="stats-row">
-    <div class="stat-mini">
-        <strong>Nodes:</strong>
-        <span id="node-count">0</span>
-    </div>
-    <div class="stat-mini">
-        <strong>Edges:</strong>
-        <span id="edge-count">0</span>
-    </div>
-    <div class="stat-mini">
-        <strong>Volume:</strong>
-        <span id="graph-volume">0</span>
-    </div>
-    <div class="stat-mini">
-        <strong>Source:</strong>
-        <span id="data-source">GraphQL API</span>
-    </div>
+    <div class="stat-mini"><strong>Nodes:</strong> <span id="node-count">0</span></div>
+    <div class="stat-mini"><strong>Edges:</strong> <span id="edge-count">0</span></div>
+    <div class="stat-mini"><strong>Volume:</strong> <span id="graph-volume">0</span></div>
+    <div class="stat-mini"><strong>Clusters:</strong> <span id="cluster-count">0</span></div>
+    <div class="stat-mini"><strong>Source:</strong> <span id="data-source">GraphQL API</span></div>
 </div>
 
 <!-- Graph Visualization -->
 <div class="visualization-container">
     <div id="network-graph"></div>
-    
+
     <div class="legend" id="legend">
         <h4>LEGEND</h4>
         <div class="legend-items">
             {% if investigation_id %}
-            <div class="legend-item">
-                <span class="legend-color" style="background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.5);"></span>
-                <span>Attacker / Suspect</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4);"></span>
-                <span>Victim / Origin</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background: #a855f7;"></span>
-                <span>Exchange / CEX</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background: #f59e0b;"></span>
-                <span>Mixer / Privacy</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background: #06b6d4;"></span>
-                <span>Bridge</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background: #6366f1;"></span>
-                <span>Related / Intermediate</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background: #334155;"></span>
-                <span>External</span>
-            </div>
-            <div class="legend-item" style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
-                <span>← Source &nbsp;&nbsp; Money Flow → &nbsp;&nbsp; Sink →</span>
+            <div class="legend-item"><span class="legend-color" style="background:#ef4444; box-shadow:0 0 6px rgba(239,68,68,0.5);"></span><span>Attacker / Suspect</span></div>
+            <div class="legend-item"><span class="legend-color" style="background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.4);"></span><span>Victim / Origin</span></div>
+            <div class="legend-item"><span class="legend-color" style="background:#a855f7;"></span><span>Exchange / CEX</span></div>
+            <div class="legend-item"><span class="legend-color" style="background:#f59e0b;"></span><span>Mixer / Privacy</span></div>
+            <div class="legend-item"><span class="legend-color" style="background:#06b6d4;"></span><span>Bridge</span></div>
+            <div class="legend-item"><span class="legend-color" style="background:#6366f1;"></span><span>Related / Intermediate</span></div>
+            <div class="legend-item"><span class="legend-color" style="background:#475569;"></span><span>External</span></div>
+            <div class="legend-item" style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary);">
+                <span>&larr; Source &nbsp; Money Flow &rarr; &nbsp; Sink &rarr;</span>
             </div>
             {% else %}
-            <div class="legend-item">
-                <span class="legend-color" style="background: #00d4ff;"></span>
-                <span>Regular Wallet</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background: #ff6b6b;"></span>
-                <span>High Volume (>10K)</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background: #51cf66;"></span>
-                <span>Contract / Exchange</span>
-            </div>
+            <div class="legend-item"><span class="legend-color" style="background:#00d4ff;"></span><span>Regular Wallet</span></div>
+            <div class="legend-item"><span class="legend-color" style="background:#ff6b6b;"></span><span>High Volume (&gt;10K)</span></div>
+            <div class="legend-item"><span class="legend-color" style="background:#51cf66;"></span><span>Contract / Exchange</span></div>
             {% endif %}
         </div>
     </div>
+</div>
+
+<!-- Cluster Insights Panel -->
+<div class="cluster-insights" id="cluster-insights" style="display:none;">
+    <h4>Cluster Analysis</h4>
+    <div class="cluster-grid" id="cluster-grid"></div>
 </div>
 
 <!-- Node Details -->
@@ -240,583 +216,1111 @@
 
 {% block extra_js %}
 <script>
-    /* ================================================================
-     *  G6 v5 – Transaction Flow / Investigation Graph
-     *  Replaces vis-network  – MIT licensed, Ant Group
-     *  Features: Combos (role grouping), Minimap, Tooltip, Legend,
-     *            Dagre LR + Force layouts, collapse/expand, 60K+ elems
-     * ================================================================ */
+/* ================================================================
+ *  vis.js Network – Transaction Flow / Investigation Graph
+ *  BIG DATA optimised: auto-cluster, edge aggregation, summary mode,
+ *  O(N+E) metrics, adaptive layout, progressive rendering.
+ * ================================================================ */
 
-    const { Graph } = G6;
+var network = null;
+var nodesDataset = null;
+var edgesDataset = null;
+var rawGraphData = null;
+var currentInvestigationId = null;
+var currentLayout = 'hierarchical';   // 'hierarchical' | 'force'
+var clustersEnabled = false;
+var summaryVisible = false;
+var clusterData = {};                  // role -> { nodes, volume, edges }
+var interClusterFlows = {};            // "from->to" -> volume
+var graphMode = 'simple';              // 'simple' | 'detail' | 'big'
 
-    let graph = null;
-    let currentLayout = 'flow';   // 'flow' (dagre LR) or 'force'
-    let combosEnabled = false;    // role-based combo grouping
-    let rawGraphData = null;
-    let currentInvestigationId = null;
+// ── Thresholds for auto-adaptation ─────────────────────────────
+var THRESHOLD_AUTO_FORCE = 200;        // auto-switch to force layout above this
+var THRESHOLD_AUTO_CLUSTER = 400;      // auto-cluster above this
+var THRESHOLD_AGG_EDGES = 300;         // aggregate edges client-side above this
+var THRESHOLD_BIG_DATA = 1000;         // big-data mode above this
+var THRESHOLD_HIDE_LABELS = 100;       // hide non-case labels above this
+var MAX_RENDER_NODES = 3000;           // max nodes to render
 
-    // ── Role colour palette ────────────────────────────────────────
-    const ROLE_COLORS = {
-        'attacker':     '#ef4444', 'suspect':  '#ef4444', 'hacker':   '#ef4444',
-        'victim':       '#22c55e', 'theft_origin': '#22c55e',
-        'exchange':     '#a855f7', 'cex':      '#a855f7', 'dex':      '#a855f7',
-        'mixer':        '#f59e0b', 'tornado':  '#f59e0b', 'tumbler':  '#f59e0b',
-        'bridge':       '#06b6d4',
-        'related':      '#6366f1',
-        'external':     '#475569',
-    };
-    const ROLE_GROUPS = {
-        'attacker': 'attacker', 'suspect': 'attacker', 'hacker': 'attacker',
-        'victim': 'victim', 'theft_origin': 'victim',
-        'exchange': 'exchange', 'cex': 'exchange', 'dex': 'exchange',
-        'mixer': 'mixer', 'tornado': 'mixer', 'tumbler': 'mixer',
-        'bridge': 'bridge',
-        'related': 'related',
-        'external': 'external',
-    };
-    const COMBO_LABELS = {
-        'attacker': '🔴 Attackers',  'victim': '🟢 Victims',
-        'exchange': '🟣 Exchanges',  'mixer': '🟠 Mixers',
-        'bridge': '🔵 Bridges',      'related': '🟤 Related',
-        'external': '⚫ External',
-    };
-    const COMBO_FILLS = {
-        'attacker': 'rgba(239,68,68,0.08)',   'victim': 'rgba(34,197,94,0.08)',
-        'exchange': 'rgba(168,85,247,0.08)',   'mixer': 'rgba(245,158,11,0.08)',
-        'bridge': 'rgba(6,182,212,0.08)',      'related': 'rgba(99,102,241,0.06)',
-        'external': 'rgba(71,85,105,0.05)',
-    };
+// ── Role colour palette ────────────────────────────────────────
+var ROLE_COLORS = {
+    'attacker': '#ef4444', 'suspect': '#ef4444', 'hacker': '#ef4444',
+    'victim': '#22c55e', 'theft_origin': '#22c55e',
+    'exchange': '#a855f7', 'cex': '#a855f7', 'dex': '#a855f7',
+    'mixer': '#f59e0b', 'tornado': '#f59e0b', 'tumbler': '#f59e0b',
+    'bridge': '#06b6d4',
+    'related': '#6366f1',
+    'external': '#475569',
+};
+var ROLE_GROUPS = {
+    'attacker': 'attacker', 'suspect': 'attacker', 'hacker': 'attacker',
+    'victim': 'victim', 'theft_origin': 'victim',
+    'exchange': 'exchange', 'cex': 'exchange', 'dex': 'exchange',
+    'mixer': 'mixer', 'tornado': 'mixer', 'tumbler': 'mixer',
+    'bridge': 'bridge', 'related': 'related', 'external': 'external',
+};
+var CLUSTER_LABELS = {
+    'attacker': 'Attackers', 'victim': 'Victims', 'exchange': 'Exchanges',
+    'mixer': 'Mixers', 'bridge': 'Bridges', 'related': 'Related', 'external': 'External',
+};
+var CLUSTER_EMOJI = {
+    'attacker': '\ud83d\udd34', 'victim': '\ud83d\udfe2', 'exchange': '\ud83d\udfe3',
+    'mixer': '\ud83d\udfe0', 'bridge': '\ud83d\udd35', 'related': '\ud83d\udfe4', 'external': '\u26ab',
+};
 
-    function roleColor(role) {
-        return ROLE_COLORS[(role || '').toLowerCase()] || ROLE_COLORS['external'];
-    }
-    function roleGroup(role) {
-        return ROLE_GROUPS[(role || '').toLowerCase()] || 'external';
-    }
+function roleColor(role) { return ROLE_COLORS[(role || '').toLowerCase()] || '#475569'; }
+function roleGroup(role) { return ROLE_GROUPS[(role || '').toLowerCase()] || 'external'; }
 
-    // ── Explorer links ─────────────────────────────────────────────
-    const EXPLORERS = {
-        'ETH': 'https://etherscan.io',     'POL': 'https://polygonscan.com',
-        'BSC': 'https://bscscan.com',      'BASE': 'https://basescan.org',
-        'ARB': 'https://arbiscan.io',      'OP': 'https://optimistic.etherscan.io',
-        'AVAX': 'https://snowtrace.io',    'FTM': 'https://ftmscan.com',
-    };
+// ── Explorer links ─────────────────────────────────────────────
+var EXPLORERS = {
+    'ETH': 'https://etherscan.io', 'POL': 'https://polygonscan.com',
+    'BSC': 'https://bscscan.com', 'BASE': 'https://basescan.org',
+    'ARB': 'https://arbiscan.io', 'OP': 'https://optimistic.etherscan.io',
+    'AVAX': 'https://snowtrace.io', 'FTM': 'https://ftmscan.com',
+};
 
-    // ── Formatters ─────────────────────────────────────────────────
-    function formatVolume(num) {
-        if (num === null || num === undefined || isNaN(num)) return '0';
-        if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
-        if (num >= 1e9)  return (num / 1e9).toFixed(2) + 'B';
-        if (num >= 1e6)  return (num / 1e6).toFixed(2) + 'M';
-        if (num >= 1e3)  return (num / 1e3).toFixed(2) + 'K';
-        return num.toFixed(2);
-    }
+// ── Formatters ─────────────────────────────────────────────────
+function formatVolume(num) {
+    if (num == null || isNaN(num) || !isFinite(num)) return '$0';
+    var abs = Math.abs(num);
+    var sign = num < 0 ? '-' : '';
+    // Repeatedly reduce absurd values (spam tokens with 1e40+ amounts)
+    // by standard ERC-20 decimals until in human-displayable range
+    var loops = 0;
+    while (abs > 1e15 && loops < 5) { abs /= 1e18; loops++; }
+    // After reduction, if still out of range, hard-clamp
+    if (abs > 1e15) abs = 1e15;
+    if (abs >= 1e12) return sign + '$' + (abs / 1e12).toFixed(2) + 'T';
+    if (abs >= 1e9)  return sign + '$' + (abs / 1e9).toFixed(2) + 'B';
+    if (abs >= 1e6)  return sign + '$' + (abs / 1e6).toFixed(2) + 'M';
+    if (abs >= 1e3)  return sign + '$' + (abs / 1e3).toFixed(2) + 'K';
+    return sign + '$' + abs.toFixed(2);
+}
 
-    // ── Build layout config ────────────────────────────────────────
-    function getLayoutConfig() {
-        if (currentLayout === 'flow') {
-            return combosEnabled
-                ? { type: 'combo-combined', outerLayout: { type: 'dagre', rankdir: 'LR', nodesep: 30, ranksep: 180 }, innerLayout: { type: 'grid', rows: 4 }, comboPadding: 20 }
-                : { type: 'antv-dagre', rankdir: 'LR', nodesep: 30, ranksep: 180 };
-        }
-        return combosEnabled
-            ? { type: 'combo-combined', outerLayout: { type: 'd3-force' }, innerLayout: { type: 'grid' }, comboPadding: 20 }
-            : { type: 'd3-force', manyBody: { strength: -120 }, link: { distance: 100 } };
-    }
+// ── Short address ───────────────────────────────────────────────
+function shortAddr(addr) {
+    if (!addr || addr.length < 12) return addr || '';
+    return addr.substring(0, 6) + '\u2026' + addr.substring(addr.length - 4);
+}
 
-    // ── Create / recreate graph ────────────────────────────────────
-    function createGraph(g6Data) {
-        if (graph) { graph.destroy(); graph = null; }
+// ── Downsample large graphs (keep case wallets + top-degree) ───
+function downsampleForDisplay(graphData, maxNodes) {
+    maxNodes = maxNodes || MAX_RENDER_NODES;
+    if (graphData.nodes.length <= maxNodes) return graphData;
+    var degree = {};
+    graphData.edges.forEach(function(e) {
+        degree[e.from] = (degree[e.from] || 0) + 1;
+        degree[e.to]   = (degree[e.to]   || 0) + 1;
+    });
+    var caseWallets = graphData.nodes.filter(function(n) { return n.is_case_wallet; });
+    var others = graphData.nodes.filter(function(n) { return !n.is_case_wallet; })
+        .sort(function(a, b) { return (degree[b.id] || 0) - (degree[a.id] || 0); });
+    var keepNodes = caseWallets.concat(others.slice(0, maxNodes - caseWallets.length));
+    var keepIds = new Set(keepNodes.map(function(n) { return n.id; }));
+    var keepEdges = graphData.edges.filter(function(e) { return keepIds.has(e.from) && keepIds.has(e.to); });
+    return { nodes: keepNodes, edges: keepEdges };
+}
 
-        const container = document.getElementById('network-graph');
-        if (!container) return;
-
-        graph = new Graph({
-            container: 'network-graph',
-            autoFit: 'view',
-            padding: [20, 20, 20, 20],
-            data: g6Data,
-            theme: 'dark',
-
-            node: {
-                type: 'circle',
-                style: (d) => {
-                    const data = d.data || {};
-                    const role = (data.role || 'external').toLowerCase();
-                    const vol = data._volume || 0;
-                    const deg = data._degree || 0;
-                    const isCaseWallet = data.is_case_wallet;
-                    const baseSize = 8 + Math.log10(Math.max(vol, 1)) * 4;
-                    const size = Math.max(10, Math.min(baseSize, 50));
-                    const showLabel = isCaseWallet || deg > 8;
-
-                    return {
-                        size,
-                        fill: roleColor(role),
-                        stroke: isCaseWallet ? '#f8fafc' : roleColor(role),
-                        lineWidth: isCaseWallet ? 3 : 1.5,
-                        shadowColor: isCaseWallet ? roleColor(role) : 'transparent',
-                        shadowBlur: isCaseWallet ? 16 : 0,
-                        labelText: showLabel ? (data._label || '') : '',
-                        labelFill: '#94a3b8',
-                        labelFontSize: 10,
-                        labelFontFamily: 'Inter, sans-serif',
-                        labelPlacement: 'bottom',
-                        labelOffsetY: 4,
-                        cursor: 'pointer',
-                    };
-                },
-                state: {
-                    selected: { stroke: '#f8fafc', lineWidth: 3, shadowBlur: 20 },
-                    highlight: { stroke: '#f8fafc', lineWidth: 2 },
-                },
-            },
-
-            edge: {
-                type: currentLayout === 'flow' ? 'cubic-horizontal' : 'line',
-                style: (d) => {
-                    const data = d.data || {};
-                    const val = data.value || 0;
-                    const w = 0.5 + Math.log10(Math.max(val, 1)) * 0.5;
-                    return {
-                        lineWidth: Math.max(0.5, Math.min(w, 6)),
-                        stroke: 'rgba(100, 100, 140, 0.3)',
-                        endArrow: true,
-                        endArrowSize: 6,
-                        cursor: 'pointer',
-                    };
-                },
-                state: {
-                    highlight: { stroke: '#6366f1', lineWidth: 2.5 },
-                },
-            },
-
-            combo: {
-                type: 'rect',
-                style: (d) => {
-                    const grp = d.id || '';
-                    return {
-                        fill: COMBO_FILLS[grp] || 'rgba(71,85,105,0.05)',
-                        stroke: ROLE_COLORS[grp] || '#475569',
-                        lineWidth: 1,
-                        lineDash: [4, 4],
-                        radius: 12,
-                        padding: 16,
-                        labelText: COMBO_LABELS[grp] || grp,
-                        labelFill: '#94a3b8',
-                        labelFontSize: 11,
-                        labelFontFamily: 'Inter, sans-serif',
-                        labelPlacement: 'top',
-                        collapsedMarker: true,
-                        collapsedMarkerType: 'child-count',
-                    };
-                },
-            },
-
-            layout: getLayoutConfig(),
-
-            behaviors: [
-                'drag-canvas',
-                'zoom-canvas',
-                'drag-element',
-                { type: 'collapse-expand', trigger: 'dblclick' },
-                'click-select',
-            ],
-
-            plugins: [
-                {
-                    type: 'minimap', key: 'minimap',
-                    size: [180, 120], position: 'right-bottom',
-                },
-                {
-                    type: 'tooltip', key: 'node-tooltip',
-                    trigger: 'pointerenter',
-                    enable: (e) => e.targetType === 'node',
-                    getContent: (e, items) => {
-                        const d = items[0]?.data || {};
-                        const role = (d.role || 'external').toLowerCase();
-                        const vol = formatVolume(d._volume || 0);
-                        const deg = d._degree || 0;
-                        const caseTag = d.is_case_wallet ? '<b style="color:#ff6b6b;">⚠ CASE WALLET</b><br>' : '';
-                        return `<div style="max-width:320px;font-size:12px;font-family:Inter,sans-serif;">
-                            ${caseTag}<b>${items[0].id}</b><br>
-                            Role: <span style="color:${roleColor(role)}">${role}</span><br>
-                            Volume: ${vol} · Connections: ${deg}
-                        </div>`;
-                    },
-                    style: { '.tooltip': { background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '8px 12px', color: '#e2e8f0' } },
-                },
-                {
-                    type: 'tooltip', key: 'edge-tooltip',
-                    trigger: 'pointerenter',
-                    enable: (e) => e.targetType === 'edge',
-                    getContent: (e, items) => {
-                        const d = items[0]?.data || {};
-                        return `<div style="max-width:280px;font-size:12px;font-family:Inter,sans-serif;">
-                            <b>${formatVolume(d.value || 0)} ${d.token || ''}</b><br>
-                            Tx: ${(d.hash || '').substring(0, 16)}…
-                        </div>`;
-                    },
-                    style: { '.tooltip': { background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '8px 12px', color: '#e2e8f0' } },
-                },
-            ],
-            animation: true,
-        });
-
-        // ── Node click → detail panel ──────────────────────────────
-        graph.on('node:click', (e) => {
-            const nodeId = e.target.id;
-            if (rawGraphData) showInvestigationNodeDetails(nodeId);
-            else showNodeDetails(nodeId);
-        });
-
-        graph.render();
-    }
-
-    // ── Convert backend data → G6 data ─────────────────────────────
-    function toG6Data(graphData) {
-        // Pre-compute metrics
-        const nodeVolume = {}, nodeInDeg = {}, nodeOutDeg = {};
-        graphData.edges.forEach(e => {
-            const val = e.value || 0;
-            nodeVolume[e.from] = (nodeVolume[e.from] || 0) + val;
-            nodeVolume[e.to]   = (nodeVolume[e.to]   || 0) + val;
-            nodeOutDeg[e.from] = (nodeOutDeg[e.from]  || 0) + 1;
-            nodeInDeg[e.to]    = (nodeInDeg[e.to]     || 0) + 1;
-        });
-
-        // Nodes
-        const usedCombos = new Set();
-        const g6Nodes = graphData.nodes.map(n => {
-            const role = (n.role || 'external').toLowerCase();
-            const grp = roleGroup(role);
-            const vol = nodeVolume[n.id] || 0;
-            const deg = (nodeInDeg[n.id] || 0) + (nodeOutDeg[n.id] || 0);
-            const isCaseWallet = n.is_case_wallet;
-
-            let label = '';
-            if (isCaseWallet) label = n.label + ' (' + role + ')';
-            else if (deg > 8) label = n.label;
-
-            if (combosEnabled) usedCombos.add(grp);
-
-            return {
-                id: n.id,
-                data: { ...n, _volume: vol, _degree: deg, _label: label },
-                ...(combosEnabled ? { combo: grp } : {}),
+// ── Client-side edge aggregation ────────────────────────────────
+// Merges parallel edges between the same (from,to) pair into one
+// weighted edge with tx count label. O(E) time.
+function aggregateEdges(edges) {
+    var buckets = {};                  // "from|to" -> merged edge
+    edges.forEach(function(e) {
+        var key = e.from + '|' + e.to;
+        if (buckets[key]) {
+            buckets[key].value += (e.value || 0);
+            buckets[key]._txCount += 1;
+            // keep latest timestamp
+            if (e.timestamp && (!buckets[key]._timestamp || e.timestamp > buckets[key]._timestamp)) {
+                buckets[key]._timestamp = e.timestamp;
+            }
+            // collect unique tokens
+            if (e.token && buckets[key]._tokens.indexOf(e.token) === -1) {
+                buckets[key]._tokens.push(e.token);
+            }
+            // collect unique chains
+            if (e.chain && buckets[key]._chains.indexOf(e.chain) === -1) {
+                buckets[key]._chains.push(e.chain);
+            }
+        } else {
+            buckets[key] = {
+                from: e.from, to: e.to,
+                value: e.value || 0,
+                token: e.token || '',
+                chain: e.chain || '',
+                hash: e.hash || '',
+                timestamp: e.timestamp,
+                blockNumber: e.blockNumber,
+                _txCount: 1,
+                _timestamp: e.timestamp,
+                _tokens: e.token ? [e.token] : [],
+                _chains: e.chain ? [e.chain] : [],
             };
+        }
+    });
+    return Object.values(buckets);
+}
+
+// ── Compute graph metrics: O(N + E) ────────────────────────────
+// Builds a nodeMap for O(1) lookups — no more .find() in edge loop.
+function computeMetrics(graphData) {
+    var nodeVolume = {}, nodeInDeg = {}, nodeOutDeg = {};
+
+    // Build O(1) node lookup map
+    var nodeMap = {};
+    graphData.nodes.forEach(function(n) { nodeMap[n.id] = n; });
+
+    // Single pass over edges for degree + volume
+    graphData.edges.forEach(function(e) {
+        var val = e.value || 0;
+        nodeVolume[e.from] = (nodeVolume[e.from] || 0) + val;
+        nodeVolume[e.to]   = (nodeVolume[e.to]   || 0) + val;
+        nodeOutDeg[e.from] = (nodeOutDeg[e.from]  || 0) + 1;
+        nodeInDeg[e.to]    = (nodeInDeg[e.to]     || 0) + 1;
+    });
+
+    // Cluster analysis using nodeMap (O(1) lookups)
+    clusterData = {};
+    interClusterFlows = {};
+    graphData.nodes.forEach(function(n) {
+        var grp = roleGroup(n.role);
+        if (!clusterData[grp]) clusterData[grp] = { nodes: [], totalVolume: 0, edgeCount: 0, inVolume: 0, outVolume: 0 };
+        clusterData[grp].nodes.push(n.id);
+        clusterData[grp].totalVolume += (nodeVolume[n.id] || 0);
+    });
+
+    // Edge cluster attribution — O(E) with nodeMap
+    graphData.edges.forEach(function(e) {
+        var fromNode = nodeMap[e.from];
+        var toNode   = nodeMap[e.to];
+        if (fromNode && toNode) {
+            var grpF = roleGroup(fromNode.role);
+            var grpT = roleGroup(toNode.role);
+            if (clusterData[grpF]) {
+                clusterData[grpF].edgeCount++;
+                clusterData[grpF].outVolume += (e.value || 0);
+            }
+            if (clusterData[grpT]) {
+                clusterData[grpT].inVolume += (e.value || 0);
+            }
+            if (grpT !== grpF && clusterData[grpT]) clusterData[grpT].edgeCount++;
+            // Inter-cluster flow tracking (for summary)
+            var flowKey = grpF + '->' + grpT;
+            if (!interClusterFlows[flowKey]) interClusterFlows[flowKey] = { volume: 0, txCount: 0, from: grpF, to: grpT };
+            interClusterFlows[flowKey].volume += (e.value || 0);
+            interClusterFlows[flowKey].txCount += (e._txCount || 1);
+        }
+    });
+
+    return { nodeVolume: nodeVolume, nodeInDeg: nodeInDeg, nodeOutDeg: nodeOutDeg, nodeMap: nodeMap };
+}
+
+// ── Convert backend data → vis.js datasets ─────────────────────
+function toVisData(graphData, isInvestigation) {
+    var nc = graphData.nodes.length;
+    var ec = graphData.edges.length;
+
+    // Client-side edge aggregation for large graphs
+    var edgesToRender = graphData.edges;
+    var wasAggregated = false;
+    if (ec > THRESHOLD_AGG_EDGES) {
+        edgesToRender = aggregateEdges(graphData.edges);
+        wasAggregated = true;
+    }
+
+    var displayData = { nodes: graphData.nodes, edges: edgesToRender };
+    var metrics = computeMetrics(displayData);
+
+    // Decide label display threshold
+    var hideLabels = nc > THRESHOLD_HIDE_LABELS;
+
+    // De-duplicate nodes
+    var seenIds = new Set();
+    var visNodes = [];
+    graphData.nodes.forEach(function(n) {
+        if (seenIds.has(n.id)) return;
+        seenIds.add(n.id);
+
+        var role = (n.role || 'external').toLowerCase();
+        var vol  = metrics.nodeVolume[n.id] || 0;
+        var deg  = (metrics.nodeInDeg[n.id] || 0) + (metrics.nodeOutDeg[n.id] || 0);
+        var isCaseWallet = n.is_case_wallet;
+        var color = isInvestigation ? roleColor(role) : (n.color || '#00d4ff');
+        var isSimple = nc < THRESHOLD_AUTO_FORCE;
+        var baseSize = isSimple ? (12 + Math.log10(Math.max(vol, 1)) * 6) : (8 + Math.log10(Math.max(vol, 1)) * 5);
+        var size = Math.max(isSimple ? 14 : 10, Math.min(baseSize, 50));
+        if (isCaseWallet) size = Math.max(size, isSimple ? 22 : 18);
+
+        var addrLabel = n.label || shortAddr(n.id);
+        if (isCaseWallet) addrLabel += ' (' + role + ')';
+
+        // Smart label: show for case wallets, high-degree, small graphs, or simple mode
+        var showLabel = isCaseWallet || deg > 6 || !hideLabels || nc < 50;
+
+        visNodes.push({
+            id: n.id,
+            label: showLabel ? addrLabel : '',
+            title: '<div style="font-family:Inter,sans-serif;font-size:12px;max-width:320px;">' +
+                   (isCaseWallet ? '<b style="color:#ff6b6b;">\u26a0 CASE WALLET</b><br>' : '') +
+                   '<b>' + n.id + '</b><br>' +
+                   'Role: <span style="color:' + color + '">' + role + '</span><br>' +
+                   'Volume: ' + formatVolume(vol) + ' &bull; Connections: ' + deg +
+                   '</div>',
+            size: size,
+            color: {
+                background: color,
+                border: isCaseWallet ? '#f8fafc' : color,
+                highlight: { background: color, border: '#f8fafc' },
+                hover: { background: color, border: '#e2e8f0' },
+            },
+            borderWidth: isCaseWallet ? 3 : 1.5,
+            shadow: isCaseWallet ? { enabled: true, color: color, size: 16, x: 0, y: 0 } : false,
+            font: { color: '#94a3b8', size: 10, face: 'Inter, sans-serif' },
+            _role: role,
+            _group: roleGroup(role),
+            _volume: vol,
+            _degree: deg,
+            _isCaseWallet: isCaseWallet,
+            _rawNode: n,
         });
+    });
 
-        // Edges – G6 uses source/target
-        const g6Edges = graphData.edges.map((e, idx) => ({
-            id: `edge-${idx}`,
-            source: e.from,
-            target: e.to,
-            data: { value: e.value, token: e.token, chain: e.chain, hash: e.hash, timestamp: e.timestamp, blockNumber: e.blockNumber },
-        }));
+    // Edges
+    var nodeIds = new Set(visNodes.map(function(n) { return n.id; }));
+    var visEdges = [];
+    edgesToRender.forEach(function(e, idx) {
+        if (!nodeIds.has(e.from) || !nodeIds.has(e.to)) return;
+        var val = e.value || 0;
+        var txCount = e._txCount || 1;
+        var w = 0.5 + Math.log10(Math.max(val, 1)) * 0.8;
 
-        // Combos (only when enabled)
-        const g6Combos = combosEnabled
-            ? Array.from(usedCombos).map(grp => ({ id: grp, data: { label: COMBO_LABELS[grp] || grp } }))
-            : [];
+        var tooltipParts = ['<b>' + formatVolume(val) + '</b>'];
+        if (e._tokens && e._tokens.length > 0) tooltipParts.push(e._tokens.join(', '));
+        else if (e.token) tooltipParts.push(e.token);
+        if (txCount > 1) tooltipParts.push('\xd7' + txCount + ' txs');
+        if (e._chains && e._chains.length > 0) tooltipParts.push('Chains: ' + e._chains.join(', '));
+        else if (e.chain) tooltipParts.push('Chain: ' + e.chain);
+        if (e.hash && txCount === 1) tooltipParts.push('Tx: ' + e.hash.substring(0, 16) + '\u2026');
 
-        return { nodes: g6Nodes, edges: g6Edges, combos: g6Combos };
+        var edgeLabel = '';
+        if (txCount > 1 && nc < 500) edgeLabel = '\xd7' + txCount;
+        else if (val > 0 && nc < 100) edgeLabel = formatVolume(val);
+
+        visEdges.push({
+            id: 'edge-' + idx,
+            from: e.from,
+            to: e.to,
+            value: val,
+            label: edgeLabel,
+            title: '<div style="font-family:Inter,sans-serif;font-size:12px;">' + tooltipParts.join('<br>') + '</div>',
+            width: Math.max(0.5, Math.min(w, 8)),
+            color: { color: 'rgba(100,100,140,0.35)', highlight: '#6366f1', hover: '#818cf8' },
+            arrows: { to: { enabled: true, scaleFactor: 0.6, type: 'arrow' } },
+            smooth: { type: 'curvedCW', roundness: 0.15 },
+            font: { size: 8, color: '#818cf8', strokeWidth: 0, face: 'Inter, sans-serif', align: 'top' },
+            _token: e.token,
+            _chain: e.chain,
+            _hash: e.hash,
+            _timestamp: e.timestamp || e._timestamp,
+            _blockNumber: e.blockNumber,
+            _txCount: txCount,
+        });
+    });
+
+    return { nodes: visNodes, edges: visEdges, wasAggregated: wasAggregated };
+}
+
+// ── vis.js layout options (adaptive) ────────────────────────────
+function getVisOptions(nodeCount) {
+    var isBig = nodeCount > THRESHOLD_BIG_DATA;
+    var options = {
+        autoResize: true,
+        nodes: {
+            shape: 'dot',
+            font: { color: '#94a3b8', size: isBig ? 8 : 10, face: 'Inter, sans-serif' },
+            borderWidth: 1.5,
+            borderWidthSelected: 3,
+        },
+        edges: {
+            font: { size: 8, color: '#64748b', strokeWidth: 0, face: 'Inter, sans-serif' },
+            smooth: isBig ? { enabled: true, type: 'continuous' } : { type: 'curvedCW', roundness: 0.15 },
+            color: { color: 'rgba(100,100,140,0.35)', highlight: '#6366f1' },
+        },
+        interaction: {
+            hover: !isBig,
+            tooltipDelay: isBig ? 200 : 80,
+            navigationButtons: true,
+            keyboard: { enabled: true },
+            multiselect: true,
+            hideEdgesOnDrag: isBig,
+            hideEdgesOnZoom: isBig,
+            hideNodesOnDrag: false,
+        },
+        physics: { enabled: false },
+    };
+
+    if (currentLayout === 'hierarchical') {
+        var isSmall = nodeCount < 50;
+        options.layout = {
+            hierarchical: {
+                direction: 'LR',
+                sortMethod: 'directed',
+                levelSeparation: isSmall ? 250 : Math.max(120, 200 - nodeCount * 0.15),
+                nodeSpacing: isSmall ? 80 : Math.max(30, 60 - nodeCount * 0.06),
+                treeSpacing: isSmall ? 120 : 80,
+                blockShifting: true,
+                edgeMinimization: true,
+                parentCentralization: true,
+            },
+        };
+        options.physics = { enabled: false };
+    } else {
+        options.layout = { hierarchical: false, improvedLayout: nodeCount < 500 };
+        var iters = 300;
+        if (nodeCount > 500) iters = 150;
+        if (nodeCount > 1000) iters = 80;
+        if (nodeCount > 2000) iters = 40;
+        options.physics = {
+            enabled: true,
+            forceAtlas2Based: {
+                gravitationalConstant: isBig ? -20 : -40,
+                centralGravity: isBig ? 0.01 : 0.005,
+                springLength: isBig ? 80 : 150,
+                springConstant: 0.04,
+                damping: isBig ? 0.6 : 0.4,
+                avoidOverlap: 0.3,
+            },
+            maxVelocity: 50,
+            stabilization: {
+                enabled: true,
+                iterations: iters,
+                updateInterval: 25,
+            },
+        };
     }
 
-    // ── Render investigation graph ──────────────────────────────────
-    function renderInvestigationGraph(graphData) {
-        if (!graphData.nodes || graphData.nodes.length === 0) {
-            showNotification('No transfer data. Run "Sync Transfers" first.', 'warning');
-            return;
+    return options;
+}
+
+// ── Create / recreate graph ────────────────────────────────────
+function createGraph(visData) {
+    if (network) { network.destroy(); network = null; }
+
+    var container = document.getElementById('network-graph');
+    if (!container) return;
+
+    // Guard: 0 nodes — show empty state
+    if (!visData.nodes || visData.nodes.length === 0) {
+        showEmptyState('No nodes to display. Adjust your filters or sync more data.');
+        return;
+    }
+
+    // Loading overlay
+    var overlay = document.getElementById('vis-loading-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'vis-loading-overlay';
+        overlay.className = 'vis-loading';
+        container.appendChild(overlay);
+    }
+    overlay.innerHTML = '<div class="vis-spinner"></div>Rendering ' + visData.nodes.length.toLocaleString() + ' nodes, ' +
+                        visData.edges.length.toLocaleString() + ' edges\u2026';
+    overlay.style.display = 'flex';
+
+    nodesDataset = new vis.DataSet(visData.nodes);
+    edgesDataset = new vis.DataSet(visData.edges);
+
+    var options = getVisOptions(visData.nodes.length);
+
+    network = new vis.Network(container, { nodes: nodesDataset, edges: edgesDataset }, options);
+
+    // ── Stabilization progress ──────────────────────────────────
+    network.on('stabilizationProgress', function(params) {
+        var pct = Math.round((params.iterations / params.total) * 100);
+        if (overlay) overlay.innerHTML = '<div class="vis-spinner"></div>Stabilising\u2026 ' + pct + '%';
+    });
+    network.on('stabilizationIterationsDone', function() {
+        if (overlay) overlay.style.display = 'none';
+        network.setOptions({ physics: { enabled: false } });
+    });
+    if (currentLayout === 'hierarchical') {
+        network.once('afterDrawing', function() {
+            if (overlay) overlay.style.display = 'none';
+        });
+    }
+
+    // ── Click → detail panel ────────────────────────────────────
+    network.on('click', function(params) {
+        if (params.nodes.length > 0) {
+            var nodeId = params.nodes[0];
+            // Handle cluster click
+            if (network.isCluster(nodeId)) {
+                network.openCluster(nodeId);
+                return;
+            }
+            if (currentInvestigationId) showInvestigationNodeDetails(nodeId);
+            else showNodeDetails(nodeId);
+        } else {
+            document.getElementById('node-details').style.display = 'none';
         }
+    });
 
-        const g6Data = toG6Data(graphData);
-        createGraph(g6Data);
+    // ── Double-click → zoom & highlight neighbours ──────────────
+    network.on('doubleClick', function(params) {
+        if (params.nodes.length > 0) {
+            var nodeId = params.nodes[0];
+            if (network.isCluster(nodeId)) return; // let vis.js handle cluster open
+            network.focus(nodeId, { scale: 1.5, animation: { duration: 500 } });
+            highlightNeighbours(nodeId);
+        }
+    });
 
-        // Update stats
-        document.getElementById('node-count').textContent = graphData.nodes.length.toLocaleString();
-        document.getElementById('edge-count').textContent = graphData.edges.length.toLocaleString();
-        const totalVolume = graphData.edges.reduce((sum, e) => sum + (e.value || 0), 0);
-        document.getElementById('graph-volume').textContent = formatVolume(totalVolume);
-        document.getElementById('data-source').textContent = 'Investigation Transfers';
+    // Auto-cluster for big graphs (never auto-cluster in simple mode)
+    if (visData.nodes.length >= THRESHOLD_AUTO_CLUSTER) {
+        if (!clustersEnabled) {
+            clustersEnabled = true;
+            updateClusterButtons();
+            showNotification('Auto-clustered ' + visData.nodes.length + ' nodes by role', 'info');
+        }
+    }
+    if (clustersEnabled) applyClusters();
 
-        showNotification(`Loaded ${graphData.edges.length} transfers from ${graphData.nodes.length} wallets (${currentLayout}${combosEnabled ? ' + combos' : ''})`, 'success');
+    updateClusterInsights();
+
+    // Auto-show summary only for big-data mode
+    if (visData.nodes.length >= THRESHOLD_BIG_DATA && !summaryVisible) {
+        toggleSummary();
+    }
+}
+
+// ── Cluster by role (vis.js clustering API) ─────────────────────
+function applyClusters() {
+    if (!network) return;
+
+    var groups = ['attacker', 'victim', 'exchange', 'mixer', 'bridge', 'related', 'external'];
+    groups.forEach(function(grp) {
+        var clusterInfo = clusterData[grp];
+        if (!clusterInfo || clusterInfo.nodes.length < 2) return;
+
+        // Skip clustering case-wallet-heavy groups (keep them visible)
+        var caseCount = 0;
+        clusterInfo.nodes.forEach(function(nid) {
+            var nd = nodesDataset.get(nid);
+            if (nd && nd._isCaseWallet) caseCount++;
+        });
+        if (caseCount > clusterInfo.nodes.length * 0.5) return;
+
+        network.cluster({
+            joinCondition: function(nodeOptions) {
+                // Never cluster case wallets — keep them always visible
+                if (nodeOptions._isCaseWallet) return false;
+                return nodeOptions._group === grp;
+            },
+            clusterNodeProperties: {
+                id: 'cluster-' + grp,
+                label: (CLUSTER_EMOJI[grp] || '') + ' ' + (CLUSTER_LABELS[grp] || grp) + ' (' + clusterInfo.nodes.length + ')',
+                shape: 'dot',
+                size: 25 + Math.sqrt(clusterInfo.nodes.length) * 4,
+                color: {
+                    background: ROLE_COLORS[grp] || '#475569',
+                    border: '#f8fafc',
+                    highlight: { background: ROLE_COLORS[grp] || '#475569', border: '#f8fafc' },
+                },
+                borderWidth: 2,
+                font: { color: '#e2e8f0', size: 12, face: 'Inter, sans-serif' },
+                title: '<div style="font-family:Inter,sans-serif;font-size:12px;">' +
+                       '<b>' + (CLUSTER_LABELS[grp] || grp) + '</b><br>' +
+                       'Wallets: ' + clusterInfo.nodes.length + '<br>' +
+                       'Volume: ' + formatVolume(clusterInfo.totalVolume) + '<br>' +
+                       'Edges: ' + clusterInfo.edgeCount +
+                       '<br><i>Click to expand</i></div>',
+            },
+            clusterEdgeProperties: {
+                color: { color: 'rgba(100,100,140,0.5)' },
+                width: 2,
+            },
+        });
+    });
+}
+
+// ── Highlight neighbour nodes ───────────────────────────────────
+function highlightNeighbours(nodeId) {
+    if (!network) return;
+    var connectedNodes = network.getConnectedNodes(nodeId);
+    var allNodes = nodesDataset.getIds();
+    var updates = [];
+    allNodes.forEach(function(id) {
+        var isHighlighted = (id === nodeId || connectedNodes.indexOf(id) !== -1);
+        updates.push({ id: id, opacity: isHighlighted ? 1.0 : 0.12 });
+    });
+    nodesDataset.update(updates);
+
+    setTimeout(function() {
+        var resets = allNodes.map(function(id) { return { id: id, opacity: 1.0 }; });
+        nodesDataset.update(resets);
+    }, 5000);
+}
+
+// ── Update cluster insights panel ───────────────────────────────
+function updateClusterInsights() {
+    var panel = document.getElementById('cluster-insights');
+    var grid = document.getElementById('cluster-grid');
+    var countEl = document.getElementById('cluster-count');
+    if (!panel || !grid) return;
+
+    var groups = Object.keys(clusterData).filter(function(g) { return clusterData[g].nodes.length > 0; });
+    if (countEl) countEl.textContent = groups.length;
+
+    // Hide cluster panel for very simple graphs (< 2 meaningful groups or < 8 total nodes)
+    var totalNodes = groups.reduce(function(s, g) { return s + clusterData[g].nodes.length; }, 0);
+    var meaningfulGroups = groups.filter(function(g) { return g !== 'external' && clusterData[g].nodes.length >= 2; });
+    if (groups.length === 0 || (totalNodes < 8 && meaningfulGroups.length < 2)) { panel.style.display = 'none'; return; }
+
+    var maxVol = Math.max.apply(null, groups.map(function(g) { return clusterData[g].totalVolume; })) || 1;
+
+    var html = '';
+    groups.sort(function(a, b) { return clusterData[b].totalVolume - clusterData[a].totalVolume; });
+    groups.forEach(function(grp) {
+        var d = clusterData[grp];
+        var pct = Math.round((d.totalVolume / maxVol) * 100);
+        var color = ROLE_COLORS[grp] || '#475569';
+        var netFlow = (d.inVolume || 0) - (d.outVolume || 0);
+        var netLabel = (netFlow >= 0 ? '+' : '-') + formatVolume(Math.abs(netFlow));
+        html += '<div class="cluster-card" onclick="focusCluster(\'' + grp + '\')">' +
+                '<div class="cluster-name" style="color:' + color + '">' +
+                (CLUSTER_EMOJI[grp] || '') + ' ' + (CLUSTER_LABELS[grp] || grp) + '</div>' +
+                '<div class="cluster-stat">' + d.nodes.length + ' wallets &bull; ' + formatVolume(d.totalVolume) + ' volume</div>' +
+                '<div class="cluster-stat">' + d.edgeCount + ' connections &bull; Net: ' + netLabel + '</div>' +
+                '<div class="cluster-bar"><div class="cluster-bar-fill" style="width:' + pct + '%;background:' + color + ';"></div></div>' +
+                '</div>';
+    });
+    grid.innerHTML = html;
+    panel.style.display = 'block';
+}
+
+// ── Focus on a cluster ──────────────────────────────────────────
+function focusCluster(grp) {
+    if (!network || !clusterData[grp]) return;
+    var nodeIds = clusterData[grp].nodes;
+    if (nodeIds.length === 0) return;
+
+    var clusterId = 'cluster-' + grp;
+    if (network.isCluster(clusterId)) {
+        network.openCluster(clusterId);
     }
 
-    // ── Layout / Combo toggles ──────────────────────────────────────
-    function toggleLayout() {
-        currentLayout = (currentLayout === 'flow') ? 'force' : 'flow';
-        const btn = document.getElementById('layout-toggle-btn');
-        if (btn) btn.textContent = currentLayout === 'flow' ? '⇄ Force' : '⇄ Flow';
-        if (rawGraphData) renderInvestigationGraph(rawGraphData);
-    }
+    network.fit({ nodes: nodeIds, animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
 
-    function toggleCombos() {
-        combosEnabled = !combosEnabled;
-        const btn = document.getElementById('combo-toggle-btn');
+    var allNodes = nodesDataset.getIds();
+    var idSet = new Set(nodeIds);
+    var updates = allNodes.map(function(id) {
+        return { id: id, opacity: idSet.has(id) ? 1.0 : 0.1 };
+    });
+    nodesDataset.update(updates);
+    setTimeout(function() {
+        nodesDataset.update(allNodes.map(function(id) { return { id: id, opacity: 1.0 }; }));
+    }, 6000);
+
+    showNotification('Focused on ' + (CLUSTER_LABELS[grp] || grp) + ': ' + nodeIds.length + ' wallets', 'info');
+}
+
+// ── Summary panel ───────────────────────────────────────────────
+function buildSummary() {
+    var summaryGrid = document.getElementById('summary-grid');
+    var flowContainer = document.getElementById('flow-table-container');
+    if (!summaryGrid || !flowContainer || !rawGraphData) return;
+
+    var nc = rawGraphData.nodes.length;
+    var ec = rawGraphData.edges.length;
+    var totalVol = rawGraphData.edges.reduce(function(s, e) { return s + (e.value || 0); }, 0);
+    var caseWallets = rawGraphData.nodes.filter(function(n) { return n.is_case_wallet; });
+    var tokens = new Set(), chains = new Set();
+    rawGraphData.edges.forEach(function(e) {
+        if (e.token) tokens.add(e.token);
+        if (e.chain) chains.add(e.chain);
+    });
+
+    // Key stats
+    summaryGrid.innerHTML =
+        '<div class="summary-stat"><div class="stat-label">Wallets</div><div class="stat-val" style="color:#e2e8f0;">' + nc.toLocaleString() + '</div></div>' +
+        '<div class="summary-stat"><div class="stat-label">Transfers</div><div class="stat-val" style="color:#818cf8;">' + ec.toLocaleString() + '</div></div>' +
+        '<div class="summary-stat"><div class="stat-label">Total Volume</div><div class="stat-val" style="color:#22c55e;">' + formatVolume(totalVol) + '</div></div>' +
+        '<div class="summary-stat"><div class="stat-label">Case Wallets</div><div class="stat-val" style="color:#ef4444;">' + caseWallets.length + '</div></div>' +
+        '<div class="summary-stat"><div class="stat-label">Tokens</div><div class="stat-val" style="color:#a855f7;">' + tokens.size + '</div></div>' +
+        '<div class="summary-stat"><div class="stat-label">Chains</div><div class="stat-val" style="color:#06b6d4;">' + chains.size + '</div></div>';
+
+    // Inter-cluster flow table (top flows by volume)
+    var flows = Object.values(interClusterFlows)
+        .filter(function(f) { return f.from !== f.to; })
+        .sort(function(a, b) { return b.volume - a.volume; })
+        .slice(0, 15);
+
+    if (flows.length > 0) {
+        var ftHtml = '<h4 style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 0.5rem 0;">Top Role-to-Role Flows</h4>';
+        ftHtml += '<table class="flow-table"><thead><tr><th>Source</th><th></th><th>Target</th><th>Volume</th><th>Txs</th></tr></thead><tbody>';
+        flows.forEach(function(f) {
+            ftHtml += '<tr>' +
+                '<td style="color:' + (ROLE_COLORS[f.from] || '#94a3b8') + '">' + (CLUSTER_EMOJI[f.from] || '') + ' ' + (CLUSTER_LABELS[f.from] || f.from) + '</td>' +
+                '<td class="flow-arrow">\u2192</td>' +
+                '<td style="color:' + (ROLE_COLORS[f.to] || '#94a3b8') + '">' + (CLUSTER_EMOJI[f.to] || '') + ' ' + (CLUSTER_LABELS[f.to] || f.to) + '</td>' +
+                '<td>' + formatVolume(f.volume) + '</td>' +
+                '<td>' + f.txCount.toLocaleString() + '</td>' +
+                '</tr>';
+        });
+        ftHtml += '</tbody></table>';
+        flowContainer.innerHTML = ftHtml;
+    } else {
+        flowContainer.innerHTML = '';
+    }
+}
+
+function toggleSummary() {
+    summaryVisible = !summaryVisible;
+    var panel = document.getElementById('graph-summary');
+    if (panel) {
+        panel.style.display = summaryVisible ? 'block' : 'none';
+        if (summaryVisible) buildSummary();
+    }
+    var btns = [document.getElementById('summary-toggle-btn'), document.getElementById('summary-toggle-btn2')];
+    btns.forEach(function(btn) {
+        if (btn) btn.classList.toggle('active', summaryVisible);
+    });
+}
+
+// ── Update mode badge ───────────────────────────────────────────
+function updateModeBadge(nodeCount) {
+    if (nodeCount >= THRESHOLD_BIG_DATA) graphMode = 'big';
+    else if (nodeCount >= THRESHOLD_AUTO_FORCE) graphMode = 'detail';
+    else graphMode = 'simple';
+
+    var badge = document.getElementById('mode-badge');
+    if (badge) {
+        var labels = { simple: 'SIMPLE', detail: 'DETAIL', big: 'BIG DATA' };
+        badge.textContent = labels[graphMode] || 'SIMPLE';
+        badge.className = 'mode-badge ' + graphMode;
+    }
+}
+
+function updateClusterButtons() {
+    var btns = [document.getElementById('cluster-toggle-btn'), document.getElementById('cluster-toggle-btn2')];
+    btns.forEach(function(btn) {
         if (btn) {
-            btn.textContent = combosEnabled ? '◎ No Combos' : '◎ Combos';
-            btn.classList.toggle('active', combosEnabled);
+            btn.textContent = clustersEnabled ? '\u25CE Expand' : '\u25CE Clusters';
+            btn.classList.toggle('active', clustersEnabled);
         }
-        if (rawGraphData) renderInvestigationGraph(rawGraphData);
+    });
+}
+
+// ── Empty-state message inside graph container ─────────────────
+function showEmptyState(message) {
+    var container = document.getElementById('network-graph');
+    if (!container) return;
+    container.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+        'height:100%;color:#94a3b8;font-family:Inter,sans-serif;text-align:center;padding:2rem;">' +
+        '<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" style="margin-bottom:1rem;">' +
+        '<circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>' +
+        '<div style="font-size:1rem;color:#e2e8f0;margin-bottom:0.5rem;">No Graph Data</div>' +
+        '<div style="font-size:0.85rem;max-width:400px;">' + (message || 'No transfers found. Run "Sync Transfers" to fetch blockchain data.') + '</div>' +
+        '</div>';
+}
+
+// ── Render investigation graph ──────────────────────────────────
+function renderInvestigationGraph(graphData) {
+    if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
+        showNotification('No transfer data. Run "Sync Transfers" first.', 'warning');
+        showEmptyState('No transfers found for this investigation.<br>Click <b>Sync Transfers</b> on the case page to fetch blockchain data.');
+        document.getElementById('node-count').textContent = '0';
+        document.getElementById('edge-count').textContent = '0';
+        document.getElementById('graph-volume').textContent = '0';
+        return;
     }
 
-    // ── Node detail panel (investigation mode) ──────────────────────
-    function showInvestigationNodeDetails(nodeId) {
-        if (!rawGraphData) return;
+    var nc = graphData.nodes.length;
+    var displayData = graphData;
+    var sampled = false;
 
-        const node = rawGraphData.nodes.find(n => n.id === nodeId);
-        const detailsDiv = document.getElementById('node-details');
-        const infoDiv = document.getElementById('node-info');
-
-        const incoming = rawGraphData.edges.filter(e => e.to === nodeId);
-        const outgoing = rawGraphData.edges.filter(e => e.from === nodeId);
-
-        const inByToken = {}, outByToken = {};
-        incoming.forEach(e => { const t = e.token || 'UNKNOWN'; inByToken[t] = (inByToken[t] || 0) + (e.value || 0); });
-        outgoing.forEach(e => { const t = e.token || 'UNKNOWN'; outByToken[t] = (outByToken[t] || 0) + (e.value || 0); });
-
-        const allTokens = new Set([...Object.keys(inByToken), ...Object.keys(outByToken)]);
-        let inSummary = Object.entries(inByToken).map(([t, v]) => `${formatVolume(v)} ${t}`).join(', ') || 'None';
-        let outSummary = Object.entries(outByToken).map(([t, v]) => `${formatVolume(v)} ${t}`).join(', ') || 'None';
-
-        const netFlow = {};
-        allTokens.forEach(t => { netFlow[t] = (inByToken[t] || 0) - (outByToken[t] || 0); });
-        let netSummary = Object.entries(netFlow).map(([t, v]) => `${v >= 0 ? '+' : ''}${formatVolume(v)} ${t}`).join(', ') || '0';
-
-        const firstEdge = [...incoming, ...outgoing][0];
-        const chain = firstEdge?.chain || 'ETH';
-        const explorerUrl = EXPLORERS[chain] || 'https://etherscan.io';
-        const isCaseWallet = node?.is_case_wallet;
-
-        infoDiv.innerHTML = `
-            <p><strong>Address:</strong> <a href="${explorerUrl}/address/${nodeId}" target="_blank" style="color: var(--primary);">${nodeId}</a></p>
-            ${isCaseWallet ? '<p><span style="color: #ff6b6b; font-weight: bold;">⚠ Case Wallet</span></p>' : ''}
-            <p><strong>Incoming:</strong> ${incoming.length} txs (${inSummary})</p>
-            <p><strong>Outgoing:</strong> ${outgoing.length} txs (${outSummary})</p>
-            <p><strong>Net Flow:</strong> ${netSummary}</p>
-            <p class="mt-md">
-                <a href="${explorerUrl}/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">View on Explorer</a>
-                <button onclick="addToInvestigation('${nodeId}')" class="btn btn-primary btn-sm">Investigate</button>
-            </p>
-        `;
-        detailsDiv.style.display = 'block';
+    // Downsample if over render limit
+    if (nc > MAX_RENDER_NODES) {
+        displayData = downsampleForDisplay(graphData, MAX_RENDER_NODES);
+        sampled = true;
     }
 
-    // ── Node detail panel (standard mode) ───────────────────────────
-    function showNodeDetails(nodeId) {
-        if (!rawGraphData) return;
-        const detailsDiv = document.getElementById('node-details');
-        const infoDiv = document.getElementById('node-info');
-        const chain = document.getElementById('chain-select')?.value || 'ETH';
-        const explorerUrl = EXPLORERS[chain] || 'https://etherscan.io';
+    // Update mode badge
+    updateModeBadge(nc);
 
-        const incoming = rawGraphData.edges.filter(e => e.to === nodeId);
-        const outgoing = rawGraphData.edges.filter(e => e.from === nodeId);
-        let inVolume = 0, outVolume = 0;
-        incoming.forEach(e => inVolume += e.value || 0);
-        outgoing.forEach(e => outVolume += e.value || 0);
-        const token = document.getElementById('token-select')?.value?.toUpperCase() || 'TOKEN';
-
-        infoDiv.innerHTML = `
-            <p><strong>Address:</strong> <code>${nodeId}</code></p>
-            <p><strong>Incoming:</strong> ${incoming.length} txs (${inVolume.toFixed(2)} ${token})</p>
-            <p><strong>Outgoing:</strong> ${outgoing.length} txs (${outVolume.toFixed(2)} ${token})</p>
-            <p><strong>Net Flow:</strong> ${(inVolume - outVolume).toFixed(2)} ${token}</p>
-            <p class="mt-md">
-                <a href="${explorerUrl}/address/${nodeId}" target="_blank" class="btn btn-secondary btn-sm">View on Explorer</a>
-                <a href="/investigations?address=${nodeId}&chain=${chain}" class="btn btn-primary btn-sm">Investigate</a>
-            </p>
-        `;
-        detailsDiv.style.display = 'block';
+    // Auto-switch to force for graphs larger than threshold
+    if (displayData.nodes.length > THRESHOLD_AUTO_FORCE && currentLayout === 'hierarchical') {
+        currentLayout = 'force';
+        var btn = document.getElementById('layout-toggle-btn');
+        if (btn) btn.textContent = '\u21C4 Hierarchical';
+        if (nc > THRESHOLD_AUTO_FORCE) {
+            showNotification('Large graph — auto-switched to Force layout for stability', 'info');
+        }
     }
 
-    // ── Add wallet to investigation ──────────────────────────────────
-    function addToInvestigation(address) {
-        if (!currentInvestigationId) { showNotification('No investigation loaded', 'error'); return; }
-        fetch(`/api/investigations/${currentInvestigationId}/wallets`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address, role: 'related' })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) showNotification(data.error, 'warning');
-            else showNotification(`Added ${address.substring(0, 10)}… to investigation`, 'success');
-        })
-        .catch(err => showNotification('Error: ' + err.message, 'error'));
+    var visData = toVisData(displayData, true);
+    createGraph(visData);
+
+    // Update stats
+    document.getElementById('node-count').textContent = graphData.nodes.length.toLocaleString();
+    document.getElementById('edge-count').textContent = graphData.edges.length.toLocaleString();
+    var totalVolume = graphData.edges.reduce(function(sum, e) { return sum + (e.value || 0); }, 0);
+    document.getElementById('graph-volume').textContent = formatVolume(totalVolume);
+    var sourceLabel = 'Investigation Transfers';
+    if (sampled) sourceLabel = 'Top ' + MAX_RENDER_NODES.toLocaleString() + ' of ' + nc.toLocaleString();
+    if (visData.wasAggregated) sourceLabel += ' (edges merged)';
+    document.getElementById('data-source').textContent = sourceLabel;
+
+    // Refresh summary if visible
+    if (summaryVisible) buildSummary();
+
+    var msg = sampled
+        ? 'Showing top ' + displayData.nodes.length.toLocaleString() + ' of ' + nc.toLocaleString() + ' nodes. Use filters to narrow.'
+        : 'Loaded ' + graphData.edges.length.toLocaleString() + ' transfers from ' + nc.toLocaleString() + ' wallets';
+    if (visData.wasAggregated) msg += ' (parallel edges merged)';
+    showNotification(msg, sampled ? 'warning' : 'success');
+}
+
+// ── Layout / Cluster toggles ────────────────────────────────────
+function toggleLayout() {
+    currentLayout = (currentLayout === 'hierarchical') ? 'force' : 'hierarchical';
+    var btns = [document.getElementById('layout-toggle-btn'), document.getElementById('layout-toggle-btn2')];
+    btns.forEach(function(btn) {
+        if (btn) btn.textContent = currentLayout === 'hierarchical' ? '\u21C4 Force' : '\u21C4 Hierarchical';
+    });
+    if (rawGraphData) {
+        if (currentInvestigationId) renderInvestigationGraph(rawGraphData);
+        else reloadCurrentGraph();
     }
+}
 
-    // ── Load graph via REST / GraphQL (standard mode) ───────────────
-    async function loadGraph() {
-        const chain = document.getElementById('chain-select').value;
-        const symbol = document.getElementById('token-select').value;
-        const limit = document.getElementById('limit-select').value;
-        const minValue = document.getElementById('min-value').value || 0;
+function toggleClusters() {
+    clustersEnabled = !clustersEnabled;
+    updateClusterButtons();
+    if (rawGraphData) {
+        if (currentInvestigationId) renderInvestigationGraph(rawGraphData);
+        else reloadCurrentGraph();
+    }
+}
 
-        if (!symbol) { showNotification('Please select a token first', 'warning'); return; }
-        showNotification(`Loading ${symbol.toUpperCase()} transfers on ${chain}…`, 'info');
+function reloadCurrentGraph() {
+    if (!rawGraphData) return;
+    var visData = toVisData(rawGraphData, false);
+    createGraph(visData);
+}
 
-        try {
-            const url = `/api/graph/transfers?chain=${chain}&symbol=${symbol}&limit=${limit}`;
-            const response = await fetch(url);
-            const data = await response.json();
+// ── Node detail panel (investigation mode) ──────────────────────
+function showInvestigationNodeDetails(nodeId) {
+    if (!rawGraphData) return;
+    // Use nodeMap from last computeMetrics (avoid .find O(N))
+    var node = null;
+    for (var i = 0; i < rawGraphData.nodes.length; i++) {
+        if (rawGraphData.nodes[i].id === nodeId) { node = rawGraphData.nodes[i]; break; }
+    }
+    var detailsDiv = document.getElementById('node-details');
+    var infoDiv = document.getElementById('node-info');
 
-            if (data.error) { showNotification(`Error: ${data.error}`, 'error'); console.error(data.traceback); return; }
+    var incoming = [], outgoing = [];
+    rawGraphData.edges.forEach(function(e) {
+        if (e.to === nodeId) incoming.push(e);
+        if (e.from === nodeId) outgoing.push(e);
+    });
 
+    var inByToken = {}, outByToken = {};
+    incoming.forEach(function(e) { var t = e.token || 'UNKNOWN'; inByToken[t] = (inByToken[t] || 0) + (e.value || 0); });
+    outgoing.forEach(function(e) { var t = e.token || 'UNKNOWN'; outByToken[t] = (outByToken[t] || 0) + (e.value || 0); });
+
+    var allTokens = new Set(Object.keys(inByToken).concat(Object.keys(outByToken)));
+    var inSummary = Object.entries(inByToken).map(function(kv) { return formatVolume(kv[1]) + ' ' + kv[0]; }).join(', ') || 'None';
+    var outSummary = Object.entries(outByToken).map(function(kv) { return formatVolume(kv[1]) + ' ' + kv[0]; }).join(', ') || 'None';
+
+    var netFlow = {};
+    allTokens.forEach(function(t) { netFlow[t] = (inByToken[t] || 0) - (outByToken[t] || 0); });
+    var netSummary = Object.entries(netFlow).map(function(kv) { return (kv[1] >= 0 ? '+' : '') + formatVolume(kv[1]) + ' ' + kv[0]; }).join(', ') || '0';
+
+    var firstEdge = incoming.concat(outgoing)[0];
+    var chain = (firstEdge && firstEdge.chain) || 'ETH';
+    var explorerUrl = EXPLORERS[chain] || 'https://etherscan.io';
+    var isCaseWallet = node && node.is_case_wallet;
+
+    infoDiv.innerHTML =
+        '<p><strong>Address:</strong> <a href="' + explorerUrl + '/address/' + nodeId + '" target="_blank" style="color:var(--primary);">' + nodeId + '</a></p>' +
+        (isCaseWallet ? '<p><span style="color:#ff6b6b;font-weight:bold;">\u26a0 Case Wallet</span></p>' : '') +
+        '<p><strong>Role:</strong> <span style="color:' + roleColor(node ? node.role : 'external') + '">' + (node ? node.role : 'external') + '</span></p>' +
+        '<p><strong>Incoming:</strong> ' + incoming.length + ' txs (' + inSummary + ')</p>' +
+        '<p><strong>Outgoing:</strong> ' + outgoing.length + ' txs (' + outSummary + ')</p>' +
+        '<p><strong>Net Flow:</strong> ' + netSummary + '</p>' +
+        '<p class="mt-md">' +
+        '<a href="' + explorerUrl + '/address/' + nodeId + '" target="_blank" class="btn btn-secondary btn-sm">View on Explorer</a> ' +
+        '<button onclick="addToInvestigation(\'' + nodeId + '\')" class="btn btn-primary btn-sm">Investigate</button>' +
+        '</p>';
+    detailsDiv.style.display = 'block';
+}
+
+// ── Node detail panel (standard mode) ───────────────────────────
+function showNodeDetails(nodeId) {
+    if (!rawGraphData) return;
+    var detailsDiv = document.getElementById('node-details');
+    var infoDiv = document.getElementById('node-info');
+    var chain = (document.getElementById('chain-select') || {}).value || 'ETH';
+    var explorerUrl = EXPLORERS[chain] || 'https://etherscan.io';
+
+    var incoming = [], outgoing = [];
+    rawGraphData.edges.forEach(function(e) {
+        if (e.to === nodeId) incoming.push(e);
+        if (e.from === nodeId) outgoing.push(e);
+    });
+    var inVolume = 0, outVolume = 0;
+    incoming.forEach(function(e) { inVolume += e.value || 0; });
+    outgoing.forEach(function(e) { outVolume += e.value || 0; });
+    var token = ((document.getElementById('token-select') || {}).value || 'TOKEN').toUpperCase();
+
+    infoDiv.innerHTML =
+        '<p><strong>Address:</strong> <code>' + nodeId + '</code></p>' +
+        '<p><strong>Incoming:</strong> ' + incoming.length + ' txs (' + inVolume.toFixed(2) + ' ' + token + ')</p>' +
+        '<p><strong>Outgoing:</strong> ' + outgoing.length + ' txs (' + outVolume.toFixed(2) + ' ' + token + ')</p>' +
+        '<p><strong>Net Flow:</strong> ' + (inVolume - outVolume).toFixed(2) + ' ' + token + '</p>' +
+        '<p class="mt-md">' +
+        '<a href="' + explorerUrl + '/address/' + nodeId + '" target="_blank" class="btn btn-secondary btn-sm">View on Explorer</a> ' +
+        '<a href="/investigations?address=' + nodeId + '&chain=' + chain + '" class="btn btn-primary btn-sm">Investigate</a>' +
+        '</p>';
+    detailsDiv.style.display = 'block';
+}
+
+// ── Add wallet to investigation ──────────────────────────────────
+function addToInvestigation(address) {
+    if (!currentInvestigationId) { showNotification('No investigation loaded', 'error'); return; }
+    fetch('/api/investigations/' + currentInvestigationId + '/wallets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: address, role: 'related' })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) showNotification(data.error, 'warning');
+        else showNotification('Added ' + address.substring(0, 10) + '\u2026 to investigation', 'success');
+    })
+    .catch(function(err) { showNotification('Error: ' + err.message, 'error'); });
+}
+
+// ── Load graph via REST / GraphQL (standard mode) ───────────────
+function loadGraph() {
+    var chain = document.getElementById('chain-select').value;
+    var symbol = document.getElementById('token-select').value;
+    var limit = document.getElementById('limit-select').value;
+    var minValue = document.getElementById('min-value').value || 0;
+
+    if (!symbol) { showNotification('Please select a token first', 'warning'); return; }
+    showNotification('Loading ' + symbol.toUpperCase() + ' transfers on ' + chain + '\u2026', 'info');
+
+    fetch('/api/graph/transfers?chain=' + chain + '&symbol=' + symbol + '&limit=' + limit)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { showNotification('Error: ' + data.error, 'error'); return; }
             if (data.nodes && data.nodes.length > 0) {
-                let filteredEdges = data.edges;
-                let filteredNodes = data.nodes;
+                var filteredEdges = data.edges;
+                var filteredNodes = data.nodes;
                 if (parseFloat(minValue) > 0) {
-                    filteredEdges = data.edges.filter(e => e.value >= parseFloat(minValue));
-                    const ids = new Set();
-                    filteredEdges.forEach(e => { ids.add(e.from); ids.add(e.to); });
-                    filteredNodes = data.nodes.filter(n => ids.has(n.id));
+                    filteredEdges = data.edges.filter(function(e) { return e.value >= parseFloat(minValue); });
+                    var ids = new Set();
+                    filteredEdges.forEach(function(e) { ids.add(e.from); ids.add(e.to); });
+                    filteredNodes = data.nodes.filter(function(n) { return ids.has(n.id); });
                 }
 
                 rawGraphData = { nodes: filteredNodes, edges: filteredEdges };
-                const g6Data = toG6Data(rawGraphData);
-                createGraph(g6Data);
+                updateModeBadge(filteredNodes.length);
+                var visData = toVisData(rawGraphData, false);
+                createGraph(visData);
 
                 document.getElementById('node-count').textContent = filteredNodes.length;
                 document.getElementById('edge-count').textContent = filteredEdges.length;
-                const totalVol = filteredEdges.reduce((s, e) => s + (e.value || 0), 0);
+                var totalVol = filteredEdges.reduce(function(s, e) { return s + (e.value || 0); }, 0);
                 document.getElementById('graph-volume').textContent = totalVol.toLocaleString() + ' ' + symbol.toUpperCase();
-                showNotification(`Loaded ${filteredEdges.length} transfers from ${filteredNodes.length} wallets`, 'success');
+                showNotification('Loaded ' + filteredEdges.length + ' transfers from ' + filteredNodes.length + ' wallets', 'success');
             } else {
                 showNotification('No transfer data found. Try fetching data first via Admin panel.', 'warning');
             }
-        } catch (error) {
-            console.error('Error loading graph:', error);
-            showNotification('Failed to load graph: ' + error.message, 'error');
+        })
+        .catch(function(err) {
+            console.error('Error loading graph:', err);
+            showNotification('Failed to load graph: ' + err.message, 'error');
+        });
+}
+
+// ── Export ───────────────────────────────────────────────────────
+function exportGraph() {
+    var chain = (document.getElementById('chain-select') || {}).value || 'unknown';
+    var symbol = (document.getElementById('token-select') || {}).value || 'unknown';
+    var exportData = {
+        nodes: rawGraphData ? rawGraphData.nodes : [],
+        edges: rawGraphData ? rawGraphData.edges : [],
+        clusters: clusterData,
+        interClusterFlows: interClusterFlows,
+        metadata: {
+            chain: chain, symbol: symbol, engine: 'vis-network',
+            mode: graphMode, clustersEnabled: clustersEnabled,
+            exportedAt: new Date().toISOString()
         }
-    }
+    };
+    var blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'bubble-graph-' + chain + '-' + symbol + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification('Graph exported (' + graphMode + ' mode)', 'success');
+}
 
-    // ── Export ───────────────────────────────────────────────────────
-    function exportGraph() {
-        const chain = document.getElementById('chain-select')?.value || 'unknown';
-        const symbol = document.getElementById('token-select')?.value || 'unknown';
-        const exportData = {
-            nodes: rawGraphData?.nodes || [],
-            edges: rawGraphData?.edges || [],
-            metadata: { chain, symbol, engine: 'G6-v5', exportedAt: new Date().toISOString() }
-        };
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url;
-        a.download = `bubble-graph-${chain}-${symbol}.json`; a.click();
-        URL.revokeObjectURL(url);
-        showNotification('Graph exported successfully', 'success');
-    }
-
-    // ── Load tokens (standard mode) ─────────────────────────────────
-    async function loadTokens() {
-        try {
-            const response = await fetch('/api/tokens/list');
-            const data = await response.json();
-            const tokenSelect = document.getElementById('token-select');
+// ── Load tokens (standard mode) ─────────────────────────────────
+function loadTokens() {
+    fetch('/api/tokens/list')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var tokenSelect = document.getElementById('token-select');
             if (!tokenSelect) return;
             tokenSelect.innerHTML = '';
-
             if (data.tokens && data.tokens.length > 0) {
-                const def = document.createElement('option'); def.value = ''; def.textContent = '-- Select Token --';
+                var def = document.createElement('option');
+                def.value = ''; def.textContent = '-- Select Token --';
                 tokenSelect.appendChild(def);
-                const byChain = {};
-                data.tokens.forEach(t => { const c = t.trigram || 'OTHER'; if (!byChain[c]) byChain[c] = []; byChain[c].push(t); });
-                Object.keys(byChain).sort().forEach(c => {
-                    const optg = document.createElement('optgroup'); optg.label = c;
-                    byChain[c].forEach(t => { const o = document.createElement('option'); o.value = t.symbol.toLowerCase(); o.textContent = `${t.symbol} - ${t.name || t.symbol}`; optg.appendChild(o); });
+                var byChain = {};
+                data.tokens.forEach(function(t) { var c = t.trigram || 'OTHER'; if (!byChain[c]) byChain[c] = []; byChain[c].push(t); });
+                Object.keys(byChain).sort().forEach(function(c) {
+                    var optg = document.createElement('optgroup'); optg.label = c;
+                    byChain[c].forEach(function(t) {
+                        var o = document.createElement('option');
+                        o.value = t.symbol.toLowerCase();
+                        o.textContent = t.symbol + ' - ' + (t.name || t.symbol);
+                        optg.appendChild(o);
+                    });
                     tokenSelect.appendChild(optg);
                 });
             } else {
-                ['USDT','USDC','WETH','DAI','LINK'].forEach(s => { const o = document.createElement('option'); o.value = s.toLowerCase(); o.textContent = s; tokenSelect.appendChild(o); });
+                ['USDT','USDC','WETH','DAI','LINK'].forEach(function(s) {
+                    var o = document.createElement('option'); o.value = s.toLowerCase(); o.textContent = s;
+                    tokenSelect.appendChild(o);
+                });
             }
-        } catch(err) {
+        })
+        .catch(function(err) {
             console.error('Failed to load tokens:', err);
-            const ts = document.getElementById('token-select');
+            var ts = document.getElementById('token-select');
             if (ts) ts.innerHTML = '<option value="usdt">USDT</option><option value="usdc">USDC</option><option value="weth">WETH</option>';
-        }
-    }
+        });
+}
 
-    // ── Investigation filters ───────────────────────────────────────
-    async function loadInvestigationGraph(investigationId) {
-        currentInvestigationId = investigationId;
-        try {
-            const invResp = await fetch(`/api/investigations/${investigationId}`);
-            const invData = await invResp.json();
-            if (invData.error) { showNotification('Investigation not found', 'error'); return; }
-
-            const titleEl = document.getElementById('inv-title');
-            const subtitleEl = document.getElementById('inv-subtitle');
-            if (titleEl) titleEl.textContent = invData.name || `Investigation #${investigationId}`;
-            if (subtitleEl) {
-                const wc = invData.wallets ? invData.wallets.length : 0;
-                const tc = invData.tokens ? invData.tokens.length : 0;
-                subtitleEl.textContent = `${wc} wallets • ${tc} tokens tracked`;
+// ── Investigation load & filters ────────────────────────────────
+function loadInvestigationGraph(investigationId) {
+    currentInvestigationId = investigationId;
+    fetch('/api/investigations/' + investigationId)
+        .then(function(r) { return r.json(); })
+        .then(function(invData) {
+            if (invData.error) {
+                showNotification('Investigation not found', 'error');
+                showEmptyState('Investigation not found. Go back and select a valid case.');
+                return Promise.reject('abort');
             }
 
-            const graphResp = await fetch(`/api/investigations/${investigationId}/graph?include_external=true`);
-            const graphData = await graphResp.json();
-            if (graphData.error) { showNotification('Error loading graph: ' + graphData.error, 'error'); return; }
+            var titleEl = document.getElementById('inv-title');
+            var subtitleEl = document.getElementById('inv-subtitle');
+            if (titleEl) {
+                titleEl.innerHTML = (invData.name || ('Investigation #' + investigationId)) +
+                    ' <span class="mode-badge simple" id="mode-badge">SIMPLE</span>';
+            }
+            if (subtitleEl) {
+                var wc = invData.wallets ? invData.wallets.length : 0;
+                var tc = invData.tokens ? invData.tokens.length : 0;
+                subtitleEl.textContent = wc + ' wallets \u2022 ' + tc + ' tokens tracked';
+            }
 
+            // Request aggregated edges for large investigations (more wallets = more transfers)
+            var wCount = invData.wallets ? invData.wallets.length : 0;
+            var useAgg = wCount > 20;
+            var graphUrl = '/api/investigations/' + investigationId + '/graph?include_external=true';
+            if (useAgg) graphUrl += '&aggregate=true&max_edges=15000';
+
+            return fetch(graphUrl);
+        })
+        .then(function(r) {
+            if (!r) return Promise.reject('abort');
+            return r.json();
+        })
+        .then(function(graphData) {
+            if (!graphData) return;
+            if (graphData.error) {
+                showNotification('Error loading graph: ' + graphData.error, 'error');
+                showEmptyState('Error: ' + graphData.error);
+                return;
+            }
             rawGraphData = graphData;
             populateFilters(graphData);
             renderInvestigationGraph(graphData);
-        } catch(err) {
+        })
+        .catch(function(err) {
+            if (err === 'abort') return; // controlled early-exit, not an error
             console.error('Error loading investigation graph:', err);
-            showNotification('Failed to load graph: ' + err.message, 'error');
-        }
-    }
-
-    function populateFilters(graphData) {
-        const tokens = new Set(), chains = new Set();
-        graphData.edges.forEach(e => { if (e.token) tokens.add(e.token); if (e.chain) chains.add(e.chain); });
-
-        const tokenFilter = document.getElementById('inv-token-filter');
-        if (tokenFilter) {
-            tokenFilter.innerHTML = '<option value="all">All Tokens</option>';
-            Array.from(tokens).sort().forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; tokenFilter.appendChild(o); });
-        }
-        const chainFilter = document.getElementById('inv-chain-filter');
-        if (chainFilter) {
-            chainFilter.innerHTML = '<option value="all">All Chains</option>';
-            Array.from(chains).sort().forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; chainFilter.appendChild(o); });
-        }
-    }
-
-    function applyInvestigationFilters() {
-        if (!rawGraphData) return;
-        const minValue = parseFloat(document.getElementById('inv-min-value')?.value || 0);
-        const tokenF = document.getElementById('inv-token-filter')?.value || 'all';
-        const chainF = document.getElementById('inv-chain-filter')?.value || 'all';
-
-        let fEdges = rawGraphData.edges.filter(e => {
-            if (minValue > 0 && (e.value || 0) < minValue) return false;
-            if (tokenF !== 'all' && e.token !== tokenF) return false;
-            if (chainF !== 'all' && e.chain !== chainF) return false;
-            return true;
+            showNotification('Failed to load graph: ' + (err.message || err), 'error');
+            showEmptyState('Failed to load graph. Check your connection and try again.');
         });
-        const ids = new Set();
-        fEdges.forEach(e => { ids.add(e.from); ids.add(e.to); });
-        const fNodes = rawGraphData.nodes.filter(n => ids.has(n.id));
+}
 
-        renderInvestigationGraph({ nodes: fNodes, edges: fEdges });
-        showNotification(`Filtered: ${fEdges.length} transfers, ${fNodes.length} wallets`, 'info');
+function populateFilters(graphData) {
+    var tokens = new Set(), chains = new Set();
+    graphData.edges.forEach(function(e) { if (e.token) tokens.add(e.token); if (e.chain) chains.add(e.chain); });
+
+    var tokenFilter = document.getElementById('inv-token-filter');
+    if (tokenFilter) {
+        tokenFilter.innerHTML = '<option value="all">All Tokens</option>';
+        Array.from(tokens).sort().forEach(function(t) {
+            var o = document.createElement('option'); o.value = t; o.textContent = t;
+            tokenFilter.appendChild(o);
+        });
     }
-
-    function resetInvestigationFilters() {
-        const mv = document.getElementById('inv-min-value'); if (mv) mv.value = 0;
-        const tf = document.getElementById('inv-token-filter'); if (tf) tf.value = 'all';
-        const cf = document.getElementById('inv-chain-filter'); if (cf) cf.value = 'all';
-        if (rawGraphData) { renderInvestigationGraph(rawGraphData); showNotification('Filters reset', 'info'); }
+    var chainFilter = document.getElementById('inv-chain-filter');
+    if (chainFilter) {
+        chainFilter.innerHTML = '<option value="all">All Chains</option>';
+        Array.from(chains).sort().forEach(function(c) {
+            var o = document.createElement('option'); o.value = c; o.textContent = c;
+            chainFilter.appendChild(o);
+        });
     }
+}
 
-    // ── Init ────────────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', function() {
-        loadTokens();
-        const investigationId = {{ investigation_id|default('null') }};
-        if (investigationId) {
-            loadInvestigationGraph(investigationId);
-        }
+function applyInvestigationFilters() {
+    if (!rawGraphData) return;
+    var minValue = parseFloat((document.getElementById('inv-min-value') || {}).value || 0);
+    var tokenF = (document.getElementById('inv-token-filter') || {}).value || 'all';
+    var chainF = (document.getElementById('inv-chain-filter') || {}).value || 'all';
+
+    var fEdges = rawGraphData.edges.filter(function(e) {
+        if (minValue > 0 && (e.value || 0) < minValue) return false;
+        if (tokenF !== 'all' && e.token !== tokenF) return false;
+        if (chainF !== 'all' && e.chain !== chainF) return false;
+        return true;
     });
+    var ids = new Set();
+    fEdges.forEach(function(e) { ids.add(e.from); ids.add(e.to); });
+    var fNodes = rawGraphData.nodes.filter(function(n) { return ids.has(n.id); });
+
+    renderInvestigationGraph({ nodes: fNodes, edges: fEdges });
+    showNotification('Filtered: ' + fEdges.length + ' transfers, ' + fNodes.length + ' wallets', 'info');
+}
+
+function resetInvestigationFilters() {
+    var mv = document.getElementById('inv-min-value'); if (mv) mv.value = 0;
+    var tf = document.getElementById('inv-token-filter'); if (tf) tf.value = 'all';
+    var cf = document.getElementById('inv-chain-filter'); if (cf) cf.value = 'all';
+    if (rawGraphData) { renderInvestigationGraph(rawGraphData); showNotification('Filters reset', 'info'); }
+}
+
+// ── Init ────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+    loadTokens();
+    var investigationId = {{ investigation_id|default('null') }};
+    if (investigationId) {
+        loadInvestigationGraph(investigationId);
+    }
+});
 </script>
 {% endblock %}
